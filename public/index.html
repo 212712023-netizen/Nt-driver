@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nt Driver</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="auth-gate" class="auth-gate">
+    <div class="auth-card">
+      <div class="brand-logo-wrap auth-brand-logo">
+        <img src="logo.svg" alt="NT Driver" class="brand-logo-image" />
+      </div>
+
+      <div class="auth-tabs" role="tablist" aria-label="Autenticacao">
+        <button type="button" class="auth-tab active" data-auth-tab="login">Entrar</button>
+        <button type="button" class="auth-tab" data-auth-tab="register">Cadastrar</button>
+      </div>
+
+      <form id="auth-login-form" class="auth-form active" novalidate>
+        <label for="auth-login-email">Email</label>
+        <input id="auth-login-email" type="email" autocomplete="email" placeholder="voce@email.com" required />
+        <label for="auth-login-password">Senha</label>
+        <input id="auth-login-password" type="password" autocomplete="current-password" placeholder="Sua senha" required />
+        <button type="submit" class="auth-submit">Entrar</button>
+        <button type="button" id="open-forgot-form-btn" class="auth-link-btn">Esqueci minha senha</button>
+      </form>
+
+      <form id="auth-register-form" class="auth-form" novalidate>
+        <label for="auth-register-name">Nome</label>
+        <input id="auth-register-name" type="text" autocomplete="name" placeholder="Seu nome" required />
+        <label for="auth-register-email">Email</label>
+        <input id="auth-register-email" type="email" autocomplete="email" placeholder="voce@email.com" required />
+        <label for="auth-register-password">Senha</label>
+        <input id="auth-register-password" type="password" autocomplete="new-password" placeholder="Minimo 6 caracteres" required />
+        <button type="submit" class="auth-submit">Criar conta</button>
+      </form>
+
+      <form id="auth-forgot-form" class="auth-form" novalidate>
+        <label for="auth-forgot-email">Email da conta</label>
+        <input id="auth-forgot-email" type="email" autocomplete="email" placeholder="voce@email.com" required />
+        <button type="submit" class="auth-submit">Enviar link de recuperacao</button>
+        <button type="button" id="open-reset-manual-btn" class="auth-link-btn">Ja tenho o token</button>
+        <button type="button" id="back-to-login-btn" class="auth-link-btn">Voltar para login</button>
+      </form>
+
+      <form id="auth-reset-form" class="auth-form" novalidate>
+        <label for="auth-reset-email">Email da conta</label>
+        <input id="auth-reset-email" type="email" autocomplete="email" placeholder="voce@email.com" required />
+        <label for="auth-reset-token">Token recebido</label>
+        <input id="auth-reset-token" type="text" placeholder="Cole o token do email" required />
+        <label for="auth-reset-password">Nova senha</label>
+        <input id="auth-reset-password" type="password" autocomplete="new-password" placeholder="Minimo 6 caracteres" required />
+        <label for="auth-reset-password-confirm">Confirmar nova senha</label>
+        <input id="auth-reset-password-confirm" type="password" autocomplete="new-password" placeholder="Repita a nova senha" required />
+        <button type="submit" class="auth-submit">Redefinir senha</button>
+      </form>
+
+      <p id="auth-message" class="auth-message" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <div id="app-shell" class="app-shell app-shell-hidden">
+    <aside class="sidebar">
+      <div class="brand brand-logo-wrap">
+        <img src="logo.svg" alt="NT Driver" class="brand-logo-image" />
+      </div>
+      <div class="sidebar-user-row">
+        <span id="current-user-name">-</span>
+        <div class="sidebar-user-actions">
+          <button id="open-password-modal-btn" class="password-btn" type="button">Senha</button>
+          <button id="logout-btn" class="logout-btn" type="button">Sair</button>
+        </div>
+      </div>
+      <nav>
+        <button class="nav-btn active" data-page="dashboard">Dashboard</button>
+        <button class="nav-btn" data-page="register">Registrar</button>
+        <button class="nav-btn" data-page="history">Histórico</button>
+        <button class="nav-btn" data-page="performance">Desempenho</button>
+        <button class="nav-btn" data-page="summary">Metas</button>
+        <button class="nav-btn" data-page="personal-expenses">Despesas Pessoais</button>
+        <button id="admin-users-nav-btn" class="nav-btn admin-only" data-page="admin-users">Usuarios</button>
+      </nav>
+      
+      </aside>
+
+    <main class="content">
+      <section id="dashboard" class="page active">
+        <div class="dashboard-toolbar">
+          <div class="dashboard-title">
+            <h1>Dashboard</h1>
+          </div>
+          <div class="filter-group">
+            <label for="month-select">Mês</label>
+            <select id="month-select"></select>
+          </div>
+        </div>
+
+        <div id="dashboard-reminder-card" class="dashboard-reminder-card" aria-live="polite">
+          <div class="dashboard-reminder-icon" aria-hidden="true">🦖</div>
+          <div class="dashboard-reminder-content">
+            <strong id="dashboard-reminder-title">Lembrete de vencimentos</strong>
+            <p id="dashboard-reminder-text">Nenhuma conta vencendo hoje.</p>
+          </div>
+        </div>
+
+        <div class="summary-grid dashboard-summary-cards">
+          <div class="card green">
+            <span>Faturamento</span>
+            <strong id="total-income">R$ 0,00</strong>
+          </div>
+          <div class="card red">
+            <span>Gastos</span>
+            <strong id="total-expense">R$ 0,00</strong>
+          </div>
+          <div class="card blue">
+            <span>Lucro</span>
+            <strong id="total-profit">R$ 0,00</strong>
+          </div>
+        </div>
+
+        <div class="dashboard-main-grid">
+          <div class="card chart-card">
+            <h2>Meta Mensal</h2>
+            <div class="goal-box">
+              <div class="goal-details">
+                <div>Meta R$ <span id="monthly-goal">10.000,00</span></div>
+                <div>Resultado <strong id="goal-result">R$ 0,00</strong> <span id="goal-result-percent">(0%)</span></div>
+                <div>Restante <strong id="goal-remaining">R$ 0,00</strong> <span id="goal-remaining-percent">(100%)</span></div>
+              </div>
+              <div class="goal-chart">
+                <canvas id="goal-donut"></canvas>
+                <div class="goal-chart-labels">
+                  <div class="goal-chart-item">
+                    <strong id="goal-rate">0%</strong>
+                    <span>Concluído</span>
+                  </div>
+                  <div class="goal-chart-item">
+                    <strong id="goal-remaining-rate">100%</strong>
+                    <span>Restante</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card dashboard-kpis-card">
+            <h2>Resumo do Mês</h2>
+            <div class="small-grid dashboard-kpis-grid">
+              <div class="mini-card green">
+                <span>Receitas</span>
+                <strong id="month-income">R$ 0,00</strong>
+              </div>
+              <div class="mini-card green">
+                <span>Lucro</span>
+                <strong id="month-profit">R$ 0,00</strong>
+              </div>
+              <div class="mini-card green">
+                <span>Uber</span>
+                <strong id="month-uber">R$ 0,00</strong>
+              </div>
+              <div class="mini-card green">
+                <span>99</span>
+                <strong id="month-99">R$ 0,00</strong>
+              </div>
+              <div class="mini-card red">
+                <span>Combustível</span>
+                <strong id="expense-fuel">R$ 0,00</strong>
+              </div>
+              <div class="mini-card red">
+                <span>Alimentação</span>
+                <strong id="expense-food">R$ 0,00</strong>
+              </div>
+              <div class="mini-card red">
+                <span>Troca de óleo</span>
+                <strong id="expense-oil">R$ 0,00</strong>
+              </div>
+              <div class="mini-card red">
+                <span>Lavagem</span>
+                <strong id="expense-wash">R$ 0,00</strong>
+              </div>
+              <div class="mini-card red">
+                <span>Outros</span>
+                <strong id="expense-other">R$ 0,00</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="performance" class="page">
+        <div class="page-header">
+          <h1>Análise de Desempenho</h1>
+        </div>
+        <div class="card performance-card">
+          <div class="performance-tabs" role="tablist" aria-label="Métricas de desempenho">
+            <button type="button" class="performance-tab-btn active" data-performance-tab="day" aria-selected="true">Médias por dia</button>
+            <button type="button" id="performance-week-tab" class="performance-tab-btn" data-performance-tab="week" aria-selected="false">Médias por semana</button>
+            <button type="button" class="performance-tab-btn" data-performance-tab="km" aria-selected="false">Médias por km</button>
+            <button type="button" class="performance-tab-btn" data-performance-tab="hour" aria-selected="false">Médias por hora</button>
+          </div>
+
+          <div class="performance-panel active" data-performance-panel="day">
+            <div class="performance-metrics-grid">
+              <div class="performance-item">
+                <span>Faturamento bruto por dia</span>
+                <strong id="performance-day-income">R$ 0,00</strong>
+              </div>
+              <div class="performance-item">
+                <span>Gastos por dia</span>
+                <strong id="performance-day-expense">R$ 0,00</strong>
+              </div>
+              <div class="performance-item">
+                <span>Lucro líquido por dia</span>
+                <strong id="performance-day-profit">R$ 0,00</strong>
+              </div>
+              <div class="performance-item">
+                <span>Dias trabalhados</span>
+                <strong id="performance-days-worked">0 dia(s)</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="performance-panel" data-performance-panel="km">
+            <div class="performance-metrics-grid">
+              <div class="performance-item">
+                <span>Receita por km</span>
+                <strong id="performance-km-income">R$ 0,00</strong>
+              </div>
+              <div class="performance-item">
+                <span>Gasto por km</span>
+                <strong id="performance-km-expense">R$ 0,00</strong>
+              </div>
+              <div class="performance-item">
+                <span>Lucro por km</span>
+                <strong id="performance-km-profit">R$ 0,00</strong>
+              </div>
+              <div class="performance-item">
+                <span>Km trabalhados</span>
+                <strong id="performance-km-total">0 km</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="performance-panel" data-performance-panel="week">
+            <div class="performance-week-filter">
+              <label for="performance-week-select">Semana</label>
+              <select id="performance-week-select"></select>
+            </div>
+            <div class="performance-metrics-grid">
+              <div class="performance-item">
+                <span>Faturamento bruto por semana</span>
+                <strong id="performance-week-income">R$ 0,00</strong>
+              </div>
+              <div class="performance-item">
+                <span>Gastos por semana</span>
+                <strong id="performance-week-expense">R$ 0,00</strong>
+              </div>
+              <div class="performance-item">
+                <span>Lucro líquido por semana</span>
+                <strong id="performance-week-profit">R$ 0,00</strong>
+              </div>
+              <div class="performance-item">
+                <span>Semanas ativas</span>
+                <strong id="performance-weeks-worked">0 semana(s)</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="performance-panel" data-performance-panel="hour">
+            <div class="performance-metrics-grid">
+              <div class="performance-item">
+                <span>Receita por hora</span>
+                <strong id="performance-hour-income">R$ 0,00</strong>
+              </div>
+              <div class="performance-item">
+                <span>Gasto por hora</span>
+                <strong id="performance-hour-expense">R$ 0,00</strong>
+              </div>
+              <div class="performance-item">
+                <span>Lucro por hora</span>
+                <strong id="performance-hour-profit">R$ 0,00</strong>
+              </div>
+              <div class="performance-item">
+                <span>Horas trabalhadas</span>
+                <strong id="performance-hours-total">0h</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="register" class="page">
+        <div class="page-header">
+          <h1>Registrar Dia</h1>
+        </div>
+        <div class="card register-card">
+          <label>Data</label>
+          <input type="date" id="record-date" />
+
+          <div class="form-group">
+            <h3>Receitas</h3>
+            <div class="income-sources-grid">
+              <div class="income-source-field">
+                <label for="income-value-uber">Uber</label>
+                <input type="number" id="income-value-uber" placeholder="Valor Uber" min="0" step="0.01" />
+              </div>
+              <div class="income-source-field">
+                <label for="income-value-99">99</label>
+                <input type="number" id="income-value-99" placeholder="Valor 99" min="0" step="0.01" />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <h3>Despesas</h3>
+            <div class="expense-categories-grid">
+              <div class="expense-category-field">
+                <label for="expense-fuel-value">Combustível</label>
+                <input type="number" id="expense-fuel-value" placeholder="Valor combustível" min="0" step="0.01" />
+              </div>
+              <div class="expense-category-field">
+                <label for="expense-food-value">Alimentação</label>
+                <input type="number" id="expense-food-value" placeholder="Valor alimentação" min="0" step="0.01" />
+              </div>
+              <div class="expense-category-field">
+                <label for="expense-oil-value">Troca de óleo</label>
+                <input type="number" id="expense-oil-value" placeholder="Valor troca de óleo" min="0" step="0.01" />
+              </div>
+              <div class="expense-category-field">
+                <label for="expense-wash-value">Lavagem</label>
+                <input type="number" id="expense-wash-value" placeholder="Valor lavagem" min="0" step="0.01" />
+              </div>
+              <div class="expense-category-field">
+                <label for="expense-other-value">Outros</label>
+                <input type="number" id="expense-other-value" placeholder="Valor outros" min="0" step="0.01" />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <h3>Km</h3>
+            <input type="number" id="km-value" placeholder="Km rodados" min="0" step="0.1" />
+          </div>
+
+          <div class="form-group">
+            <h3>Horas Trabalhadas</h3>
+            <input type="number" id="hours-worked" placeholder="Horas trabalhadas" min="0" step="0.1" />
+          </div>
+
+          <button id="save-record">Salvar Registro</button>
+          <div class="form-group">
+            <h3>Meta Mensal</h3>
+            <input type="number" id="monthly-goal-input" placeholder="Defina a meta do mês" min="0" step="50" />
+            <button type="button" id="save-goal" class="secondary-button">Salvar Meta</button>
+            <div id="goal-message" class="goal-message"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="history" class="page">
+        <div class="page-header">
+          <h1>Histórico</h1>
+          <div class="filter-group">
+            <label for="history-month-select">Mês</label>
+            <select id="history-month-select"></select>
+          </div>
+        </div>
+        <div class="card history-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Gastos</th>
+                <th>Total</th>
+                <th>Lucro</th>
+                <th>Km</th>
+                <th>Horas</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="records-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="summary" class="page">
+        <div class="page-header">
+          <h1>Metas</h1>
+          <div class="filter-group">
+            <label for="summary-month-select">Mês</label>
+            <select id="summary-month-select"></select>
+          </div>
+        </div>
+        <div class="summary-page-grid">
+          <div class="card pie-card">
+            <div class="pie-card-grid">
+              <div class="chart-block">
+                <h2>Metas Diárias</h2>
+                <div class="summary-goals-head">
+                  <span>Dia</span>
+                  <span>Meta</span>
+                  <span>Quanto eu fiz</span>
+                  <span>Folga</span>
+                </div>
+                <div id="summary-goals-list" class="summary-goals-list"></div>
+                
+                <div class="summary-goals-legend">
+                  <div class="legend-item" style="--color: rgba(22, 163, 74, 0.12)">
+                    <span>Meta atingida</span>
+                  </div>
+                  <div class="legend-item" style="--color: rgba(220, 38, 38, 0.12)">
+                    <span>Meta não atingida</span>
+                  </div>
+                  <div class="legend-item" style="--color: rgba(37, 99, 235, 0.12)">
+                    <span>Meta +100</span>
+                  </div>
+                  <div class="legend-item" style="--color: rgba(245, 158, 11, 0.18)">
+                    <span>Meta -100</span>
+                  </div>
+                  <div class="legend-item" style="--color: rgba(71, 85, 105, 0.18)">
+                    <span>Folga</span>
+                  </div>
+                </div>
+              </div>
+              <div class="pie-info">
+                <div id="summary-saldo-card" class="pie-info-item">
+                  <span>Saldo</span>
+                  <strong id="dashboard-total-side">R$ 0,00</strong>
+                </div>
+                <div class="pie-info-item">
+                  <span>Feito</span>
+                  <strong id="summary-monthly-goal-side">R$ 0,00</strong>
+                </div>
+                <div class="pie-info-item">
+                  <span>Falta para Meta</span>
+                  <strong id="dashboard-profit-side">R$ 0,00</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <section id="personal-expenses" class="page">
+        <div class="page-header">
+          <h1>Despesas Pessoais</h1>
+        </div>
+
+        <div class="personal-tabs" role="tablist" aria-label="Abas de despesas pessoais">
+          <button type="button" class="personal-tab-btn active" data-personal-tab="overview" aria-selected="true">
+            <span class="tab-icon tab-icon-overview" aria-hidden="true"></span>
+            <span>Resumo</span>
+          </button>
+          <button type="button" class="personal-tab-btn" data-personal-tab="list" aria-selected="false">
+            <span class="tab-icon tab-icon-list" aria-hidden="true"></span>
+            <span>Lista</span>
+          </button>
+          <button type="button" class="personal-tab-btn" data-personal-tab="charts" aria-selected="false">
+            <span class="tab-icon tab-icon-charts" aria-hidden="true"></span>
+            <span>Graficos</span>
+          </button>
+        </div>
+
+        <div class="personal-tab-panel active" data-personal-panel="overview">
+          <div class="personal-summary-cards-grid">
+            <div class="card green">
+              <span>Entradas</span>
+              <strong id="personal-incomes">R$ 0,00</strong>
+            </div>
+            <div class="card blue">
+              <span>Pagos</span>
+              <strong id="personal-paid">R$ 0,00</strong>
+            </div>
+            <div class="card red">
+              <span>Pendentes</span>
+              <strong id="personal-pending">R$ 0,00</strong>
+            </div>
+            <div class="card red">
+              <span>Total</span>
+              <strong id="personal-expenses-total">R$ 0,00</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="personal-tab-panel" data-personal-panel="list">
+          <div class="card personal-expense-card">
+            <div class="personal-list">
+              <div class="personal-month-row">
+                <label for="personal-filter-month">Mês</label>
+                <select id="personal-filter-month"></select>
+              </div>
+              <div class="personal-table-wrapper">
+                <table class="personal-table">
+                  <thead>
+                    <tr>
+                      <th>Descrição</th>
+                      <th>Valor</th>
+                      <th>Vencimento</th>
+                      <th>Parcelas</th>
+                      <th>Fixo</th>
+                      <th>Categoria</th>
+                      <th>Status</th>
+                      <th>Ações</th>
+                    </tr>
+                    <tr class="personal-entry-row">
+                      <td><input class="table-input" id="personal-entry-description" placeholder="Descrição" /></td>
+                      <td><input class="table-input" type="text" inputmode="decimal" id="personal-entry-amount" placeholder="Valor" /></td>
+                      <td><input class="table-input" type="number" id="personal-entry-due-day" placeholder="Dia" min="1" max="31" /></td>
+                      <td><input class="table-input" id="personal-entry-installments" placeholder="Ex: 8/10" /></td>
+                      <td>
+                        <select class="table-select" id="personal-entry-fixed">
+                          <option value="">-</option>
+                          <option value="nao">Não</option>
+                          <option value="sim">Sim</option>
+                        </select>
+                      </td>
+                      <td>
+                        <select class="table-select" id="personal-entry-category">
+                          <option value="alimentacao">Alimentação</option>
+                          <option value="casa">Casa</option>
+                          <option value="servicos">Serviços</option>
+                          <option value="carro">Carro</option>
+                          <option value="emprestimo">Empréstimo</option>
+                          <option value="dividas">Dívidas</option>
+                          <option value="renegociacao-dividas">Renegociação de dívidas</option>
+                          <option value="educacao">Educação</option>
+                          <option value="corte-cabelo">Corte de cabelo</option>
+                          <option value="presentes">Presentes</option>
+                          <option value="lazer">Lazer</option>
+                          <option value="gastos-extras">Gastos extras</option>
+                          <option value="saude">Saúde</option>
+                          <option value="internet">Internet</option>
+                          <option value="outros">Outros</option>
+                        </select>
+                      </td>
+                      <td>
+                        <select class="table-select" id="personal-entry-status">
+                          <option value="pendente">Pendente</option>
+                          <option value="pago">Pago</option>
+                        </select>
+                      </td>
+                      <td><button type="button" id="personal-table-add" class="table-add-button">Adicionar</button></td>
+                    </tr>
+                  </thead>
+                  <tbody id="personal-expenses-list"></tbody>
+                  <tfoot id="personal-expenses-footer"></tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="personal-tab-panel" data-personal-panel="charts">
+          <div class="card personal-charts-card">
+            <div class="personal-charts-grid">
+              <div class="chart-block">
+                <h2>Despesas por Categoria</h2>
+                <canvas id="personal-pie"></canvas>
+              </div>
+              <div class="chart-block">
+                <h2>Gastos por Dia</h2>
+                <canvas id="personal-bar"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <section id="admin-users" class="page">
+        <div class="page-header">
+          <h1>Usuarios do Grupo</h1>
+        </div>
+        <div class="card admin-users-card">
+          <form id="admin-create-user-form" class="admin-user-form" novalidate>
+            <input id="admin-create-name" type="text" placeholder="Nome" required />
+            <input id="admin-create-email" type="email" placeholder="Email" required />
+            <input id="admin-create-password" type="password" placeholder="Senha inicial (min 6)" required />
+            <label class="admin-checkbox-row">
+              <input id="admin-create-is-admin" type="checkbox" />
+              <span>Criar como admin</span>
+            </label>
+            <button type="submit" class="auth-submit">Criar usuario</button>
+          </form>
+          <p id="admin-users-message" class="admin-users-message" aria-live="polite"></p>
+          <div class="admin-users-table-wrap">
+            <table class="personal-table">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>Email</th>
+                  <th>Perfil</th>
+                  <th>Criado em</th>
+                  <th>Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="admin-users-list"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div id="password-modal" class="password-modal hidden" aria-hidden="true">
+    <div class="password-card">
+      <div class="password-card-header">
+        <h2>Trocar senha</h2>
+        <button id="close-password-modal-btn" class="password-close-btn" type="button" aria-label="Fechar">×</button>
+      </div>
+      <form id="password-form" class="password-form" novalidate>
+        <label for="current-password-input">Senha atual</label>
+        <input id="current-password-input" type="password" autocomplete="current-password" placeholder="Sua senha atual" required />
+        <label for="new-password-input">Nova senha</label>
+        <input id="new-password-input" type="password" autocomplete="new-password" placeholder="Minimo 6 caracteres" required />
+        <label for="confirm-password-input">Confirmar nova senha</label>
+        <input id="confirm-password-input" type="password" autocomplete="new-password" placeholder="Repita a nova senha" required />
+        <button type="submit" class="auth-submit">Salvar nova senha</button>
+      </form>
+      <p id="password-message" class="password-message" aria-live="polite"></p>
+    </div>
+  </div>
+  <div id="app-toast" class="app-toast" role="status" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

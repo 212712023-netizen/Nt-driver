@@ -1,0 +1,22 @@
+<svg width="920" height="280" viewBox="0 0 920 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="920" y2="280" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FAF8F2"/>
+      <stop offset="1" stop-color="#E9F1FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="920" height="280" rx="24" fill="url(#bg)"/>
+  <rect x="24" y="24" width="872" height="232" rx="28" fill="#FFFFFF" fill-opacity="0.92" stroke="#D8E3F2"/>
+  <circle cx="112" cy="116" r="44" stroke="#0F172A" stroke-width="10"/>
+  <circle cx="112" cy="116" r="24" stroke="#D97706" stroke-width="8"/>
+  <circle cx="112" cy="116" r="8" fill="#D97706"/>
+  <path d="M112 116V150" stroke="#0F172A" stroke-width="8" stroke-linecap="round"/>
+  <path d="M112 116L87 98" stroke="#0F172A" stroke-width="8" stroke-linecap="round"/>
+  <path d="M112 116L137 98" stroke="#0F172A" stroke-width="8" stroke-linecap="round"/>
+  <text x="190" y="114" fill="#0F172A" font-family="Segoe UI, Arial, sans-serif" font-size="42" font-weight="700" letter-spacing="3">NT Driver</text>
+  <text x="192" y="150" fill="#475569" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="500">Painel do Motorista</text>
+  <rect x="192" y="176" width="206" height="34" rx="17" fill="#FFF7ED"/>
+  <circle cx="212" cy="193" r="5" fill="#D97706"/>
+  <text x="226" y="199" fill="#B45309" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700">Identidade com volante</text>
+  <text x="192" y="228" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="15">Visual mais direto para um app de motorista</text>
+</svg>
