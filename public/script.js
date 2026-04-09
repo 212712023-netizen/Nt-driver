@@ -150,6 +150,8 @@ const PERSONAL_EXPENSES_MIGRATED_KEY = 'nt-driver-personal-expenses-migrated';
 const SUMMARY_DAILY_GOALS_KEY = 'nt-driver-summary-daily-goals';
 const SUMMARY_DAILY_GOALS_RESET_FLAG_KEY = 'nt-driver-summary-daily-goals-reset-v2';
 const ACTIVE_PAGE_KEY = 'nt-driver-active-page';
+const ACTIVE_PERFORMANCE_TAB_KEY = 'nt-driver-active-performance-tab';
+const ACTIVE_PERSONAL_TAB_KEY = 'nt-driver-active-personal-tab';
 
 let personalExpensesCache = [];
 
@@ -406,14 +408,32 @@ const deleteRecordsByDate = async (date, options = {}) => {
 };
 
 const setActivePerformanceTab = (tabId) => {
+  const exists = Array.from(performancePanels).some((panel) => panel.dataset.performancePanel === tabId);
+  const finalTabId = exists ? tabId : 'day';
   performancePanels.forEach((panel) => {
-    panel.classList.toggle('active', panel.dataset.performancePanel === tabId);
+    panel.classList.toggle('active', panel.dataset.performancePanel === finalTabId);
   });
   performanceTabButtons.forEach((button) => {
-    const isActive = button.dataset.performanceTab === tabId;
+    const isActive = button.dataset.performanceTab === finalTabId;
     button.classList.toggle('active', isActive);
     button.setAttribute('aria-selected', isActive ? 'true' : 'false');
   });
+  try {
+    localStorage.setItem(ACTIVE_PERFORMANCE_TAB_KEY, finalTabId);
+  } catch (error) {
+    // Ignora falha de persistencia da sub-aba ativa.
+  }
+};
+
+const getSavedPerformanceTab = () => {
+  try {
+    const savedTab = localStorage.getItem(ACTIVE_PERFORMANCE_TAB_KEY);
+    if (!savedTab) return 'day';
+    const exists = Array.from(performancePanels).some((panel) => panel.dataset.performancePanel === savedTab);
+    return exists ? savedTab : 'day';
+  } catch (error) {
+    return 'day';
+  }
 };
 
 const formatPersonalCategory = (category) => PERSONAL_CATEGORY_LABELS[category] || category || 'Outros';
@@ -838,15 +858,33 @@ const populatePersonalMonthFilter = () => {
 let personalEditingId = null;
 
 const setActivePersonalTab = (tabId) => {
+  const exists = Array.from(personalTabPanels).some((panel) => panel.dataset.personalPanel === tabId);
+  const finalTabId = exists ? tabId : 'overview';
   personalTabButtons.forEach((button) => {
-    const isActive = button.dataset.personalTab === tabId;
+    const isActive = button.dataset.personalTab === finalTabId;
     button.classList.toggle('active', isActive);
     button.setAttribute('aria-selected', String(isActive));
   });
 
   personalTabPanels.forEach((panel) => {
-    panel.classList.toggle('active', panel.dataset.personalPanel === tabId);
+    panel.classList.toggle('active', panel.dataset.personalPanel === finalTabId);
   });
+  try {
+    localStorage.setItem(ACTIVE_PERSONAL_TAB_KEY, finalTabId);
+  } catch (error) {
+    // Ignora falha de persistencia da sub-aba ativa.
+  }
+};
+
+const getSavedPersonalTab = () => {
+  try {
+    const savedTab = localStorage.getItem(ACTIVE_PERSONAL_TAB_KEY);
+    if (!savedTab) return 'overview';
+    const exists = Array.from(personalTabPanels).some((panel) => panel.dataset.personalPanel === savedTab);
+    return exists ? savedTab : 'overview';
+  } catch (error) {
+    return 'overview';
+  }
 };
 
 const getPersonalExpenseInput = (override = {}) => {
@@ -2193,8 +2231,8 @@ const init = () => {
     });
   });
   setActivePage(getSavedActivePage());
-  setActivePersonalTab('overview');
-  setActivePerformanceTab('day');
+  setActivePersonalTab(getSavedPersonalTab());
+  setActivePerformanceTab(getSavedPerformanceTab());
   renderPersonalExpenses();
   renderDashboardDueReminders();
   loadRecords();
