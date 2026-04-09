@@ -61,6 +61,27 @@ const initDb = async () => {
     )
   `);
 
+  await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_type TEXT');
+  await query(`
+    UPDATE users
+    SET profile_type = 'driver'
+    WHERE profile_type IS NULL OR profile_type = ''
+  `);
+  await query("ALTER TABLE users ALTER COLUMN profile_type SET DEFAULT 'driver'");
+  await query('ALTER TABLE users ALTER COLUMN profile_type SET NOT NULL');
+  await query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'users_profile_type_check'
+      ) THEN
+        ALTER TABLE users
+        ADD CONSTRAINT users_profile_type_check
+        CHECK (profile_type IN ('driver', 'personal'));
+      END IF;
+    END $$;
+  `);
+
   await query(`
     CREATE TABLE IF NOT EXISTS records (
       id BIGSERIAL PRIMARY KEY,
@@ -102,6 +123,36 @@ const initDb = async () => {
   await query('CREATE INDEX IF NOT EXISTS idx_personal_expenses_user_date ON personal_expenses(user_id, date)');
 
   await query(`
+    CREATE TABLE IF NOT EXISTS admin_notes (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      content_html TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query('CREATE INDEX IF NOT EXISTS idx_admin_notes_user_id ON admin_notes(user_id)');
+
+  await query(`
+    CREATE OR REPLACE FUNCTION set_admin_notes_updated_at()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.updated_at = NOW();
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  `);
+
+  await query('DROP TRIGGER IF EXISTS trg_admin_notes_updated_at ON admin_notes');
+  await query(`
+    CREATE TRIGGER trg_admin_notes_updated_at
+    BEFORE UPDATE ON admin_notes
+    FOR EACH ROW
+    EXECUTE FUNCTION set_admin_notes_updated_at()
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -114,6 +165,55 @@ const initDb = async () => {
 
   await query('CREATE INDEX IF NOT EXISTS idx_password_reset_user_id ON password_reset_tokens(user_id)');
   await query('CREATE INDEX IF NOT EXISTS idx_password_reset_hash ON password_reset_tokens(token_hash)');
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS personal_sheet_rows (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK (kind IN ('income', 'expense')),
+      name TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS personal_sheet_values (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      row_id BIGINT NOT NULL REFERENCES personal_sheet_rows(id) ON DELETE CASCADE,
+      year INTEGER NOT NULL CHECK (year BETWEEN 2000 AND 2100),
+      month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+      day_of_month INTEGER CHECK (day_of_month BETWEEN 1 AND 31),
+      amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, row_id, year, month)
+    )
+  `);
+
+  await query('ALTER TABLE personal_sheet_values ADD COLUMN IF NOT EXISTS day_of_month INTEGER CHECK (day_of_month BETWEEN 1 AND 31)');
+
+  await query('CREATE INDEX IF NOT EXISTS idx_personal_sheet_rows_user ON personal_sheet_rows(user_id, kind, sort_order, id)');
+  await query('CREATE INDEX IF NOT EXISTS idx_personal_sheet_values_user_year_month ON personal_sheet_values(user_id, year, month)');
+
+  await query(`
+    CREATE OR REPLACE FUNCTION set_personal_sheet_values_updated_at()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.updated_at = NOW();
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  `);
+
+  await query('DROP TRIGGER IF EXISTS trg_personal_sheet_values_updated_at ON personal_sheet_values');
+  await query(`
+    CREATE TRIGGER trg_personal_sheet_values_updated_at
+    BEFORE UPDATE ON personal_sheet_values
+    FOR EACH ROW
+    EXECUTE FUNCTION set_personal_sheet_values_updated_at()
+  `);
 
   const adminCountRow = await get('SELECT COUNT(*)::int AS count FROM users WHERE is_admin = TRUE');
   if (Number(adminCountRow?.count || 0) <= 0) {

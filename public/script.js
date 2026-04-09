@@ -19,6 +19,7 @@ const authGateEl = document.getElementById('auth-gate');
 const authTabs = document.querySelectorAll('.auth-tab');
 const authLoginForm = document.getElementById('auth-login-form');
 const authRegisterForm = document.getElementById('auth-register-form');
+const authRegisterProfileSelect = document.getElementById('auth-register-profile');
 const authForgotForm = document.getElementById('auth-forgot-form');
 const authResetForm = document.getElementById('auth-reset-form');
 const openForgotFormButton = document.getElementById('open-forgot-form-btn');
@@ -28,6 +29,7 @@ const authMessageEl = document.getElementById('auth-message');
 const currentUserNameEl = document.getElementById('current-user-name');
 const logoutButton = document.getElementById('logout-btn');
 const adminUsersNavButton = document.getElementById('admin-users-nav-btn');
+const adminNotesNavButton = document.getElementById('admin-notes-nav-btn');
 const adminCreateUserForm = document.getElementById('admin-create-user-form');
 const adminCreateNameInput = document.getElementById('admin-create-name');
 const adminCreateEmailInput = document.getElementById('admin-create-email');
@@ -35,6 +37,12 @@ const adminCreatePasswordInput = document.getElementById('admin-create-password'
 const adminCreateIsAdminInput = document.getElementById('admin-create-is-admin');
 const adminUsersListEl = document.getElementById('admin-users-list');
 const adminUsersMessageEl = document.getElementById('admin-users-message');
+const adminNotesEditorEl = document.getElementById('admin-notes-editor');
+const adminNotesMessageEl = document.getElementById('admin-notes-message');
+const adminNotesSaveButton = document.getElementById('admin-notes-save-btn');
+const adminNotesInsertTableButton = document.getElementById('admin-notes-insert-table-btn');
+const adminNotesInsertMonthTemplateButton = document.getElementById('admin-notes-insert-month-template-btn');
+const adminNotesToolbarButtons = document.querySelectorAll('.admin-notes-toolbar-btn[data-note-cmd]');
 const openPasswordModalButton = document.getElementById('open-password-modal-btn');
 const passwordModalEl = document.getElementById('password-modal');
 const closePasswordModalButton = document.getElementById('close-password-modal-btn');
@@ -49,7 +57,19 @@ let editingRecordId = null;
 let isSavingRecord = false;
 let hasBootstrappedApp = false;
 let currentSessionUser = null;
-let publicRegisterEnabled = false;
+let publicRegisterEnabled = true;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+let personalSheetState = {
+  year: new Date().getFullYear(),
+  month: new Date().getMonth() + 1,
+  rows: [],
+  values: [],
+  totals: {
+    incomeByMonth: {},
+    expenseByMonth: {},
+    balanceByMonth: {}
+  }
+};
 
 const totalIncomeEl = document.getElementById('total-income');
 const totalExpenseEl = document.getElementById('total-expense');
@@ -115,8 +135,19 @@ const personalIncomesEl = document.getElementById('personal-incomes');
 const personalExpensesTotalEl = document.getElementById('personal-expenses-total');
 const personalPaidEl = document.getElementById('personal-paid');
 const personalPendingEl = document.getElementById('personal-pending');
+const driverPersonalIncomesEl = document.getElementById('driver-personal-incomes');
+const driverPersonalExpensesTotalEl = document.getElementById('driver-personal-expenses-total');
+const driverPersonalPaidEl = document.getElementById('driver-personal-paid');
+const driverPersonalPendingEl = document.getElementById('driver-personal-pending');
 const personalExpensesList = document.getElementById('personal-expenses-list');
 const personalExpensesFooter = document.getElementById('personal-expenses-footer');
+const personalSheetYearSelect = document.getElementById('personal-sheet-year');
+const personalSheetMonthSelect = document.getElementById('personal-sheet-month');
+const personalSheetIncomeRowsEl = document.getElementById('personal-sheet-income-rows');
+const personalSheetAddIncomeButton = document.getElementById('personal-sheet-add-income');
+const personalSheetInputDescription = document.getElementById('personal-sheet-input-description');
+const personalSheetInputDay = document.getElementById('personal-sheet-input-day');
+const personalSheetInputValue = document.getElementById('personal-sheet-input-value');
 const sidebarHoursEl = document.getElementById('sidebar-hours');
 const performanceKmEl = document.getElementById('performance-km');
 const performanceHoursEl = document.getElementById('performance-hours');
@@ -218,11 +249,6 @@ const getPersonalCategorySuggestionsStorageKey = () => {
   return `${PERSONAL_CATEGORY_SUGGESTIONS_KEY_PREFIX}-${userScope}`;
 };
 
-const getDefaultPersonalCategorySuggestions = () => {
-  const unique = new Set(Object.values(PERSONAL_CATEGORY_LABELS));
-  return Array.from(unique);
-};
-
 const getStoredPersonalCategorySuggestions = () => {
   const storageKey = getPersonalCategorySuggestionsStorageKey();
   if (!storageKey) return [];
@@ -256,7 +282,6 @@ const buildPersonalCategorySuggestions = (extraEntries = []) => {
   const isRegularUser = Boolean(currentSessionUser && !currentSessionUser.isAdmin);
   const combined = [
     ...(isRegularUser ? getStoredPersonalCategorySuggestions() : []),
-    ...getDefaultPersonalCategorySuggestions(),
     ...(isRegularUser ? extraEntries : [])
   ]
     .map((entry) => normalizePersonalCategory(entry))
@@ -315,6 +340,12 @@ const setAdminUsersMessage = (message = '', type = 'error') => {
   adminUsersMessageEl.style.color = type === 'success' ? '#166534' : '#b91c1c';
 };
 
+const setAdminNotesMessage = (message = '', type = 'error') => {
+  if (!adminNotesMessageEl) return;
+  adminNotesMessageEl.textContent = message;
+  adminNotesMessageEl.style.color = type === 'success' ? '#166534' : '#b91c1c';
+};
+
 const setPasswordMessage = (message = '', type = 'error') => {
   if (!passwordMessageEl) return;
   passwordMessageEl.textContent = message;
@@ -344,8 +375,10 @@ const setAuthView = (view) => {
 const setAuthMode = (mode) => {
   authTabs.forEach((tab) => {
     const isActive = tab.dataset.authTab === mode;
+    const isRegisterTab = tab.dataset.authTab === 'register';
     tab.classList.toggle('active', isActive);
-    tab.disabled = tab.dataset.authTab === 'register' && !publicRegisterEnabled;
+    tab.classList.toggle('is-disabled', isRegisterTab && !publicRegisterEnabled);
+    tab.setAttribute('aria-disabled', isRegisterTab && !publicRegisterEnabled ? 'true' : 'false');
   });
   setAuthView(mode === 'register' && publicRegisterEnabled ? 'register' : 'login');
   setAuthMessage('');
@@ -354,7 +387,8 @@ const setAuthMode = (mode) => {
 const updateRegisterAvailabilityUi = () => {
   const registerTab = Array.from(authTabs).find((tab) => tab.dataset.authTab === 'register');
   if (registerTab) {
-    registerTab.disabled = !publicRegisterEnabled;
+    registerTab.classList.toggle('is-disabled', !publicRegisterEnabled);
+    registerTab.setAttribute('aria-disabled', !publicRegisterEnabled ? 'true' : 'false');
     registerTab.title = publicRegisterEnabled ? '' : 'Cadastro fechado. Solicite acesso ao administrador.';
   }
 };
@@ -369,17 +403,62 @@ const openAppShell = () => {
   appShellEl?.classList.remove('app-shell-hidden');
 };
 
+const getSessionProfileType = () => String(currentSessionUser?.profileType || 'driver');
+
+const isPersonalProfile = () => getSessionProfileType() === 'personal';
+
+const getAllowedPagesForUser = () => {
+  const basePages = isPersonalProfile()
+    ? ['personal-sheet', 'personal-expenses']
+    : ['dashboard', 'register', 'history', 'performance', 'summary', 'personal-expenses'];
+
+  if (currentSessionUser?.isAdmin) basePages.push('admin-users', 'admin-notes');
+  return new Set(basePages);
+};
+
+const getDefaultPageForUser = () => (isPersonalProfile() ? 'personal-sheet' : 'dashboard');
+
+const canAccessPage = (pageId) => getAllowedPagesForUser().has(pageId);
+
+const applyProfileVisibility = () => {
+  const allowedPages = getAllowedPagesForUser();
+  const personalMode = isPersonalProfile();
+  navButtons.forEach((button) => {
+    const pageId = button.dataset.page;
+    button.classList.toggle('profile-hidden', !allowedPages.has(pageId));
+  });
+  pages.forEach((page) => {
+    page.classList.toggle('profile-hidden', !allowedPages.has(page.id));
+  });
+
+  document.querySelectorAll('.driver-only').forEach((element) => {
+    element.classList.toggle('profile-hidden', personalMode);
+  });
+
+  document.querySelectorAll('.personal-only').forEach((element) => {
+    element.classList.toggle('profile-hidden', !personalMode);
+  });
+};
+
 const applySessionUser = (user) => {
   currentSessionUser = user || null;
   const fallbackName = user?.email || '-';
   setText(currentUserNameEl, user?.name || fallbackName);
+  if (adminNotesNavButton) {
+    const isAdmin = Boolean(user?.isAdmin);
+    adminNotesNavButton.classList.toggle('visible', isAdmin);
+    if (!isAdmin && adminNotesNavButton.classList.contains('active')) {
+      setActivePage(getDefaultPageForUser());
+    }
+  }
   if (adminUsersNavButton) {
     const isAdmin = Boolean(user?.isAdmin);
     adminUsersNavButton.classList.toggle('visible', isAdmin);
     if (!isAdmin && adminUsersNavButton.classList.contains('active')) {
-      setActivePage('dashboard');
+      setActivePage(getDefaultPageForUser());
     }
   }
+  applyProfileVisibility();
 };
 
 const apiFetch = async (url, options = {}) => {
@@ -403,7 +482,7 @@ const refreshRegisterAvailability = async () => {
     const payload = await response.json().catch(() => ({}));
     publicRegisterEnabled = Boolean(payload?.publicRegisterEnabled);
   } catch (error) {
-    publicRegisterEnabled = false;
+    publicRegisterEnabled = true;
   }
   updateRegisterAvailabilityUi();
 };
@@ -429,7 +508,7 @@ const renderAdminUsers = (users) => {
         <tr>
           <td>${user.name || '-'}</td>
           <td>${user.email || '-'}</td>
-          <td>${user.is_admin ? 'Admin' : 'Membro'}</td>
+          <td>${user.profile_type === 'personal' ? 'Pessoal' : 'Motorista'}${user.is_admin ? ' (Admin)' : ''}</td>
           <td>${String(user.created_at || '').slice(0, 10) || '-'}</td>
           <td>${actions}</td>
         </tr>
@@ -500,6 +579,118 @@ const loadAdminUsers = async () => {
     return;
   }
   renderAdminUsers(payload);
+};
+
+const ensureAdminNotesEditorHasContent = () => {
+  if (!adminNotesEditorEl) return;
+  const plainText = String(adminNotesEditorEl.textContent || '').trim();
+  const hasStructuredBlocks = Boolean(adminNotesEditorEl.querySelector('table, ul, ol, h1, h2, h3, h4, h5, h6, img'));
+  if (!plainText && !hasStructuredBlocks) {
+    adminNotesEditorEl.innerHTML = '<p></p>';
+  }
+};
+
+const createNotesTableMarkup = (rows, cols) => {
+  const safeRows = Math.max(1, Math.min(30, Number(rows) || 0));
+  const safeCols = Math.max(1, Math.min(12, Number(cols) || 0));
+
+  const headerCells = Array.from({ length: safeCols }, (_, index) => `<th>Coluna ${index + 1}</th>`).join('');
+  const bodyRows = Array.from({ length: Math.max(1, safeRows - 1) }, () => {
+    const cells = Array.from({ length: safeCols }, () => '<td><br></td>').join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+
+  return `
+    <table class="admin-notes-table">
+      <thead>
+        <tr>${headerCells}</tr>
+      </thead>
+      <tbody>
+        ${bodyRows}
+      </tbody>
+    </table>
+    <p></p>
+  `;
+};
+
+const createMonthlyNotesTemplateMarkup = ({ monthLabel, headers }) => {
+  const normalizedHeaders = Array.isArray(headers) && headers.length
+    ? headers.map((header) => String(header || '').trim()).filter((header) => Boolean(header))
+    : ['Nathan', 'Mauricio', 'Lene', 'Isaque', 'Saldo'];
+
+  const finalHeaders = normalizedHeaders.length ? normalizedHeaders : ['Nathan', 'Mauricio', 'Lene', 'Isaque', 'Saldo'];
+  const safeMonthLabel = escapeHtml(String(monthLabel || '').trim() || 'Mês');
+  const tableHeaderCells = finalHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join('');
+  const tableRows = Array.from({ length: 12 }, () => {
+    const cells = finalHeaders.map(() => '<td><br></td>').join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+
+  return `
+    <div class="admin-notes-month-template">
+      <h2>${safeMonthLabel}</h2>
+      <table class="admin-notes-table admin-notes-month-grid">
+        <thead>
+          <tr>${tableHeaderCells}</tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+
+      <div class="admin-notes-debts-block">
+        <h3>Dívidas</h3>
+        <p>Aluguel = </p>
+        <p>Cartão = </p>
+        <p>Seguro Casa = </p>
+        <p>Internet = </p>
+        <p class="admin-notes-highlight">Para pagar = </p>
+        <p class="admin-notes-highlight">Cartão = </p>
+        <p class="admin-notes-highlight">Total de gastos = </p>
+      </div>
+
+      <div class="admin-notes-summary-block">
+        <p>T = <span class="admin-notes-inline-space"></span> : <span class="admin-notes-inline-space"></span></p>
+        <p>( <span class="admin-notes-inline-space"></span> )</p>
+        <p class="admin-notes-highlight">Valor por pessoa = </p>
+      </div>
+    </div>
+    <p></p>
+  `;
+};
+
+const loadAdminNotes = async () => {
+  if (!currentSessionUser?.isAdmin || !adminNotesEditorEl) return;
+
+  const response = await apiFetch('/api/admin-notes');
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    setAdminNotesMessage(payload?.error || 'Falha ao carregar bloco de notas.');
+    return;
+  }
+
+  adminNotesEditorEl.innerHTML = payload?.contentHtml || '<p></p>';
+  ensureAdminNotesEditorHasContent();
+  setAdminNotesMessage(payload?.updatedAt ? `Ultima atualizacao: ${String(payload.updatedAt).slice(0, 16).replace('T', ' ')}` : '');
+};
+
+const saveAdminNotes = async () => {
+  if (!currentSessionUser?.isAdmin || !adminNotesEditorEl) return;
+  const contentHtml = String(adminNotesEditorEl.innerHTML || '').trim();
+
+  const response = await apiFetch('/api/admin-notes', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contentHtml })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    setAdminNotesMessage(payload?.error || 'Falha ao salvar bloco de notas.');
+    return;
+  }
+
+  setAdminNotesMessage('Bloco de notas salvo com sucesso.', 'success');
+  showAppToast('Notas salvas com sucesso.');
 };
 
 const deleteRecordsByDate = async (date, options = {}) => {
@@ -766,6 +957,249 @@ const importLegacyPersonalExpensesIfNeeded = async () => {
   showAppToast('Despesas pessoais antigas importadas para sua conta.');
 };
 
+const PERSONAL_SHEET_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+const populatePersonalSheetYearSelect = () => {
+  if (!personalSheetYearSelect) return;
+  const currentYear = new Date().getFullYear();
+  const options = [];
+  for (let year = currentYear + 1; year >= currentYear - 5; year -= 1) {
+    options.push(`<option value="${year}">${year}</option>`);
+  }
+  personalSheetYearSelect.innerHTML = options.join('');
+  personalSheetYearSelect.value = String(personalSheetState.year || currentYear);
+};
+
+const populatePersonalSheetMonthSelect = () => {
+  if (!personalSheetMonthSelect) return;
+  const options = PERSONAL_SHEET_MONTHS
+    .map((month) => `<option value="${month}">${monthNames[month - 1]}</option>`)
+    .join('');
+  personalSheetMonthSelect.innerHTML = options;
+  personalSheetMonthSelect.value = String(personalSheetState.month || (new Date().getMonth() + 1));
+};
+
+const getSelectedPersonalSheetMonth = () => {
+  const month = Number(personalSheetState.month || personalSheetMonthSelect?.value || (new Date().getMonth() + 1));
+  return month >= 1 && month <= 12 ? month : (new Date().getMonth() + 1);
+};
+
+const buildIsoDateForSelectedPersonalMonth = (day) => {
+  const year = Number(personalSheetState.year || new Date().getFullYear());
+  const month = getSelectedPersonalSheetMonth();
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+};
+
+const parseMoneyStrict = (rawValue) => {
+  const normalized = String(rawValue || '')
+    .replace(/\s/g, '')
+    .replace(/^R\$/i, '')
+    .trim();
+
+  if (!normalized) return null;
+  if (!/^(\d{1,3}(\.\d{3})*|\d+),\d{2}$/.test(normalized)) return null;
+
+  const parsed = Number(normalized.replace(/\./g, '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatMoneyMask = (rawValue) => {
+  const digits = String(rawValue || '').replace(/\D/g, '');
+  if (!digits) return '';
+  const cents = Number(digits);
+  if (!Number.isFinite(cents)) return '';
+  return (cents / 100).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+};
+
+const parseDateForSelectedPersonalMonth = (isoDate) => {
+  const raw = String(isoDate || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return { ok: false, message: 'Informe uma data válida.' };
+
+  const [year, month, day] = raw.split('-').map(Number);
+  if (!year || !month || !day) return { ok: false, message: 'Informe uma data válida.' };
+
+  const selectedYear = Number(personalSheetState.year || new Date().getFullYear());
+  const selectedMonth = getSelectedPersonalSheetMonth();
+  if (year !== selectedYear || month !== selectedMonth) {
+    return { ok: false, message: 'A data deve ser do mês e ano selecionados.' };
+  }
+
+  const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+  if (day < 1 || day > daysInMonth) {
+    return { ok: false, message: 'Informe uma data real para este mês.' };
+  }
+
+  return { ok: true, day };
+};
+
+const getPersonalSheetEntry = (rowId, month) => {
+  const rowIdNum = Number(rowId);
+  const monthNum = Number(month);
+  return (personalSheetState.values || []).find(
+    (item) => Number(item.rowId) === rowIdNum && Number(item.month) === monthNum
+  ) || null;
+};
+
+const getPersonalSheetValue = (rowId, month) => {
+  const entry = getPersonalSheetEntry(rowId, month);
+  return Number(entry?.amount || 0);
+};
+
+const getPersonalSheetDay = (rowId, month) => {
+  const entry = getPersonalSheetEntry(rowId, month);
+  const day = Number(entry?.day);
+  return Number.isInteger(day) && day >= 1 && day <= 31 ? day : null;
+};
+
+const upsertPersonalSheetValue = async (rowId, month, amount, day) => {
+  const response = await apiFetch('/api/personal-sheet/values', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      year: personalSheetState.year,
+      updates: [{ rowId: Number(rowId), month: Number(month), amount, day }]
+    })
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Falha ao salvar valor da planilha.');
+  }
+};
+
+const resetPersonalSheetForm = () => {
+  if (personalSheetInputDescription) personalSheetInputDescription.value = '';
+  if (personalSheetInputDay) personalSheetInputDay.value = '';
+  if (personalSheetInputValue) personalSheetInputValue.value = '';
+  personalSheetEditingRowId = null;
+  if (personalSheetAddIncomeButton) personalSheetAddIncomeButton.textContent = 'Adicionar';
+};
+
+const renderPersonalSheetTotals = () => {
+  const totals = personalSheetState.totals || {};
+  const selectedMonth = getSelectedPersonalSheetMonth();
+  const monthKey = String(selectedMonth);
+  const incomeValue = Number(totals?.incomeByMonth?.[monthKey] || 0);
+  const incomeCell = document.getElementById('personal-sheet-income-total');
+  if (incomeCell) incomeCell.textContent = formatCurrency(incomeValue);
+  if (personalIncomesEl) personalIncomesEl.textContent = formatCurrency(incomeValue);
+};
+
+const buildPersonalSheetRowHtml = (row) => {
+  const rowId = Number(row.id);
+  const selectedMonth = getSelectedPersonalSheetMonth();
+  const value = getPersonalSheetValue(rowId, selectedMonth);
+  const day = getPersonalSheetDay(rowId, selectedMonth);
+  const dateLabel = day ? buildIsoDateForSelectedPersonalMonth(day).split('-').reverse().join('/') : '-';
+
+  return `
+    <tr>
+      <td>${escapeHtml(row.name || '-')}</td>
+      <td>${dateLabel}</td>
+      <td>${formatCurrency(value)}</td>
+      <td>
+        <span class="personal-sheet-row-actions">
+          <button type="button" class="personal-sheet-edit-btn" data-row-id="${rowId}" title="Editar" aria-label="Editar linha">✏️</button>
+          <button type="button" class="personal-sheet-delete-btn" data-row-id="${rowId}" title="Excluir" aria-label="Excluir linha">🗑️</button>
+        </span>
+      </td>
+    </tr>
+  `;
+};
+
+const renderPersonalSheetRows = () => {
+  if (!personalSheetIncomeRowsEl) return;
+
+  const selectedMonth = getSelectedPersonalSheetMonth();
+  const rows = Array.isArray(personalSheetState.rows) ? personalSheetState.rows : [];
+  const incomeRows = rows.filter((row) => row.kind === 'income' && getPersonalSheetEntry(row.id, selectedMonth));
+
+  personalSheetIncomeRowsEl.innerHTML = incomeRows.length
+    ? incomeRows.map(buildPersonalSheetRowHtml).join('')
+    : '<tr><td colspan="4">Nenhuma linha de receita criada.</td></tr>';
+};
+
+const renderPersonalSheet = () => {
+  if (!personalSheetYearSelect || !personalSheetMonthSelect) return;
+  personalSheetYearSelect.value = String(personalSheetState.year || new Date().getFullYear());
+  personalSheetMonthSelect.value = String(getSelectedPersonalSheetMonth());
+  renderPersonalSheetRows();
+  renderPersonalSheetTotals();
+};
+
+const loadPersonalSheet = async (year = personalSheetState.year) => {
+  if (!personalSheetYearSelect) return;
+  const parsedYear = Number(year) || new Date().getFullYear();
+  const response = await apiFetch(`/api/personal-sheet?year=${parsedYear}`);
+  if (!response.ok) {
+    personalSheetState = {
+      year: parsedYear,
+      month: getSelectedPersonalSheetMonth(),
+      rows: [],
+      values: [],
+      totals: { incomeByMonth: {}, expenseByMonth: {}, balanceByMonth: {} }
+    };
+    renderPersonalSheet();
+    return;
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  personalSheetState = {
+    year: Number(payload?.year || parsedYear),
+    month: getSelectedPersonalSheetMonth(),
+    rows: Array.isArray(payload?.rows) ? payload.rows : [],
+    values: Array.isArray(payload?.values) ? payload.values : [],
+    totals: {
+      incomeByMonth: payload?.totals?.incomeByMonth || {},
+      expenseByMonth: payload?.totals?.expenseByMonth || {},
+      balanceByMonth: payload?.totals?.balanceByMonth || {}
+    }
+  };
+  renderPersonalSheet();
+};
+
+const createPersonalSheetRow = async (kind, name) => {
+  const response = await apiFetch('/api/personal-sheet/rows', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind, name })
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Falha ao criar linha.');
+  }
+
+  return Number(payload?.row?.id || 0);
+};
+
+const renamePersonalSheetRow = async (rowId, name) => {
+  const response = await apiFetch(`/api/personal-sheet/rows/${Number(rowId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Falha ao renomear linha.');
+  }
+};
+
+const deletePersonalSheetRow = async (rowId) => {
+  const response = await apiFetch(`/api/personal-sheet/rows/${Number(rowId)}`, {
+    method: 'DELETE'
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Falha ao excluir linha.');
+  }
+};
+
 const getCurrentYearMonth = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -1002,10 +1436,13 @@ const populatePersonalMonthFilter = () => {
 };
 
 let personalEditingId = null;
+let personalSheetEditingRowId = null;
 
 const setActivePersonalTab = (tabId) => {
-  const exists = Array.from(personalTabPanels).some((panel) => panel.dataset.personalPanel === tabId);
-  const finalTabId = exists ? tabId : 'overview';
+  const visiblePanels = Array.from(personalTabPanels).filter((panel) => !panel.classList.contains('profile-hidden'));
+  const fallbackTabId = visiblePanels[0]?.dataset.personalPanel || 'list';
+  const exists = visiblePanels.some((panel) => panel.dataset.personalPanel === tabId);
+  const finalTabId = exists ? tabId : fallbackTabId;
   personalTabButtons.forEach((button) => {
     const isActive = button.dataset.personalTab === finalTabId;
     button.classList.toggle('active', isActive);
@@ -1025,11 +1462,14 @@ const setActivePersonalTab = (tabId) => {
 const getSavedPersonalTab = () => {
   try {
     const savedTab = localStorage.getItem(ACTIVE_PERSONAL_TAB_KEY);
-    if (!savedTab) return 'overview';
-    const exists = Array.from(personalTabPanels).some((panel) => panel.dataset.personalPanel === savedTab);
-    return exists ? savedTab : 'overview';
+    const visiblePanels = Array.from(personalTabPanels).filter((panel) => !panel.classList.contains('profile-hidden'));
+    const fallbackTabId = visiblePanels[0]?.dataset.personalPanel || 'list';
+    if (!savedTab) return fallbackTabId;
+    const exists = visiblePanels.some((panel) => panel.dataset.personalPanel === savedTab);
+    return exists ? savedTab : fallbackTabId;
   } catch (error) {
-    return 'overview';
+    const visiblePanels = Array.from(personalTabPanels).filter((panel) => !panel.classList.contains('profile-hidden'));
+    return visiblePanels[0]?.dataset.personalPanel || 'list';
   }
 };
 
@@ -1124,10 +1564,15 @@ const renderPersonalExpenses = () => {
     .filter((item) => item.status !== 'pago')
     .reduce((sum, item) => sum + Number(item.amount), 0);
 
-  if (personalIncomesEl) personalIncomesEl.textContent = formatCurrency(dashboardMonthlyIncome);
   if (personalExpensesTotalEl) personalExpensesTotalEl.textContent = formatCurrency(totalExpenses);
   if (personalPaidEl) personalPaidEl.textContent = formatCurrency(totalPaid);
   if (personalPendingEl) personalPendingEl.textContent = formatCurrency(totalPending);
+
+  const summaryIncome = isPersonalProfile() ? Number(personalSheetState?.totals?.incomeByMonth?.[String(getSelectedPersonalSheetMonth())] || 0) : Number(dashboardMonthlyIncome || 0);
+  if (driverPersonalIncomesEl) driverPersonalIncomesEl.textContent = formatCurrency(summaryIncome);
+  if (driverPersonalExpensesTotalEl) driverPersonalExpensesTotalEl.textContent = formatCurrency(totalExpenses);
+  if (driverPersonalPaidEl) driverPersonalPaidEl.textContent = formatCurrency(totalPaid);
+  if (driverPersonalPendingEl) driverPersonalPendingEl.textContent = formatCurrency(totalPending);
 
   if (!personalExpensesList) return;
   personalExpensesList.innerHTML = sortedItems
@@ -1142,7 +1587,7 @@ const renderPersonalExpenses = () => {
           <td>${formatPersonalCategory(item.category)}</td>
           <td class="personal-status ${item.status === 'pago' ? 'paid' : 'pending'}">${item.status === 'pago' ? 'Pago' : 'Pendente'}</td>
           <td>
-            <button type="button" class="personal-toggle-status" data-id="${item.id ?? ''}" title="${item.status === 'pago' ? 'Marcar como pendente' : 'Marcar como pago'}" aria-label="${item.status === 'pago' ? 'Marcar como pendente' : 'Marcar como pago'}">${item.status === 'pago' ? 'Marcar pendente' : 'Marcar pago'}</button>
+            <button type="button" class="personal-toggle-status" data-id="${item.id ?? ''}" title="${item.status === 'pago' ? 'Marcar como pendente' : 'Marcar como pago'}" aria-label="${item.status === 'pago' ? 'Marcar como pendente' : 'Marcar como pago'}">${item.status === 'pago' ? 'Pendente' : 'Pago'}</button>
             <button type="button" class="personal-edit" data-id="${item.id ?? ''}" title="Editar" aria-label="Editar">✏️</button>
             <button type="button" class="personal-delete" data-id="${item.id ?? ''}" title="Excluir" aria-label="Excluir">🗑️</button>
           </td>
@@ -1219,17 +1664,13 @@ const renderPersonalExpenses = () => {
   });
 
   const categories = {};
-  const days = {};
 
   sortedItems.forEach((item) => {
     if (item.type === 'saida') {
       const normalizedCategory = normalizePersonalCategory(item.category);
       categories[normalizedCategory] = (categories[normalizedCategory] || 0) + Number(item.amount);
-      const day = item.date.slice(8, 10);
-      days[day] = (days[day] || 0) + Number(item.amount);
     }
   });
-  const sortedDays = Object.keys(days).sort((a, b) => Number(a) - Number(b));
 
   const personalPieCtx = document.getElementById('personal-pie');
   if (personalPieCtx) {
@@ -1280,28 +1721,6 @@ const renderPersonalExpenses = () => {
         }
       },
       plugins: [personalDonutPercentagePlugin]
-    });
-  }
-
-  const personalBarCtx = document.getElementById('personal-bar');
-  if (personalBarCtx) {
-    if (window.personalBarChart) window.personalBarChart.destroy();
-    window.personalBarChart = new Chart(personalBarCtx, {
-      type: 'bar',
-      data: {
-        labels: sortedDays,
-        datasets: [{
-          label: 'Gastos por dia',
-          data: sortedDays.map((day) => days[day]),
-          backgroundColor: '#2563eb'
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: false }
-        }
-      }
     });
   }
 
@@ -1395,9 +1814,14 @@ const addPersonalExpense = async (options = {}) => {
 };
 
 const setActivePage = (pageId) => {
-  if (pageId === 'admin-users' && !currentSessionUser?.isAdmin) {
-    pageId = 'dashboard';
+  if ((pageId === 'admin-users' || pageId === 'admin-notes') && !currentSessionUser?.isAdmin) {
+    pageId = getDefaultPageForUser();
   }
+
+  if (!canAccessPage(pageId)) {
+    pageId = getDefaultPageForUser();
+  }
+
   const targetPage = document.getElementById(pageId);
   if (!targetPage) return;
   pages.forEach((page) => page.classList.toggle('active', page.id === pageId));
@@ -1409,6 +1833,9 @@ const setActivePage = (pageId) => {
   }
   if (pageId === 'admin-users') {
     loadAdminUsers();
+  }
+  if (pageId === 'admin-notes') {
+    loadAdminNotes();
   }
 };
 
@@ -1429,6 +1856,116 @@ navButtons.forEach((button) => {
     setActivePage(button.dataset.page);
   });
 });
+
+personalSheetYearSelect?.addEventListener('change', async () => {
+  const selectedYear = Number(personalSheetYearSelect.value || new Date().getFullYear());
+  personalSheetState.year = selectedYear;
+  await loadPersonalSheet(selectedYear);
+});
+
+personalSheetMonthSelect?.addEventListener('change', () => {
+  const selectedMonth = Number(personalSheetMonthSelect.value || (new Date().getMonth() + 1));
+  personalSheetState.month = selectedMonth;
+  if (personalSheetInputDay?.value) {
+    const parsed = parseDateForSelectedPersonalMonth(personalSheetInputDay.value);
+    if (!parsed.ok) personalSheetInputDay.value = '';
+  }
+  renderPersonalSheet();
+});
+
+personalSheetInputValue?.addEventListener('input', () => {
+  const formatted = formatMoneyMask(personalSheetInputValue.value);
+  personalSheetInputValue.value = formatted;
+});
+
+personalSheetAddIncomeButton?.addEventListener('click', async () => {
+  const description = String(personalSheetInputDescription?.value || '').trim();
+  const rawDate = String(personalSheetInputDay?.value || '').trim();
+  const rawValue = String(personalSheetInputValue?.value || '').trim();
+
+  if (!description || !rawDate || !rawValue) {
+    showAppToast('Preencha descrição, data e valor da receita.', 'error');
+    return;
+  }
+
+  const parsedDate = parseDateForSelectedPersonalMonth(rawDate);
+  if (!parsedDate.ok) {
+    showAppToast(parsedDate.message, 'error');
+    return;
+  }
+
+  const amount = parseMoneyStrict(rawValue);
+  if (amount === null || amount <= 0) {
+    showAppToast('Use valor em formato de dinheiro, ex.: 150,00', 'error');
+    return;
+  }
+
+  const day = parsedDate.day;
+  const selectedMonth = getSelectedPersonalSheetMonth();
+
+  try {
+    if (personalSheetEditingRowId) {
+      await renamePersonalSheetRow(personalSheetEditingRowId, description);
+      await upsertPersonalSheetValue(personalSheetEditingRowId, selectedMonth, amount, day);
+      showAppToast('Receita atualizada com sucesso.');
+    } else {
+      const newRowId = await createPersonalSheetRow('income', description);
+      await upsertPersonalSheetValue(newRowId, selectedMonth, amount, day);
+      showAppToast('Receita adicionada com sucesso.');
+    }
+
+    await loadPersonalSheet(personalSheetState.year);
+    resetPersonalSheetForm();
+  } catch (error) {
+    showAppToast(error.message || 'Falha ao salvar receita.', 'error');
+  }
+});
+
+const bindPersonalSheetTableEvents = (container) => {
+  if (!container) return;
+
+  container.addEventListener('click', async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    if (target.classList.contains('personal-sheet-edit-btn')) {
+      const rowId = Number(target.dataset.rowId || 0);
+      if (!rowId) return;
+      const row = (personalSheetState.rows || []).find((item) => Number(item.id) === rowId);
+      const month = getSelectedPersonalSheetMonth();
+      const currentDay = getPersonalSheetDay(rowId, month);
+      const currentValue = getPersonalSheetValue(rowId, month);
+
+      if (personalSheetInputDescription) personalSheetInputDescription.value = row?.name || '';
+      if (personalSheetInputDay) personalSheetInputDay.value = currentDay ? buildIsoDateForSelectedPersonalMonth(currentDay) : '';
+      if (personalSheetInputValue) personalSheetInputValue.value = currentValue > 0 ? formatDecimalPtBr(currentValue) : '';
+      personalSheetEditingRowId = rowId;
+      if (personalSheetAddIncomeButton) personalSheetAddIncomeButton.textContent = 'Salvar edição';
+      personalSheetInputDescription?.focus();
+      showAppToast('Edite os campos e clique em Salvar edição.');
+      return;
+    }
+
+    if (target.classList.contains('personal-sheet-delete-btn')) {
+      const rowId = Number(target.dataset.rowId || 0);
+      if (!rowId) return;
+      const confirmed = window.confirm('Excluir esta linha e todos os valores dela?');
+      if (!confirmed) return;
+      try {
+        await deletePersonalSheetRow(rowId);
+        await loadPersonalSheet(personalSheetState.year);
+        if (personalSheetEditingRowId === rowId) {
+          resetPersonalSheetForm();
+        }
+        showAppToast('Linha excluida com sucesso.');
+      } catch (error) {
+        showAppToast(error.message || 'Falha ao excluir linha.', 'error');
+      }
+    }
+  });
+};
+
+bindPersonalSheetTableEvents(personalSheetIncomeRowsEl);
 
 personalFilterMonth?.addEventListener('change', renderPersonalExpenses);
 
@@ -1474,7 +2011,7 @@ summaryGoalsListEl?.addEventListener('click', (event) => {
 summaryGoalsListEl?.addEventListener('change', (event) => {
   const target = event.target;
   if (!(target instanceof HTMLInputElement)) return;
-  if (!target.classList.contains('summary-goal-input')) return;
+  if (!target.classList.contains('summary-goal-input') && !target.classList.contains('summary-done-input')) return;
 
   const row = target.closest('.summary-goals-row');
   if (!row) return;
@@ -1764,7 +2301,7 @@ const loadRecords = async () => {
             <span>${weekdayName}</span>
           </div>
           <input class="summary-goal-input" data-day="${day}" type="text" inputmode="decimal" value="${dayGoalValue === null ? '' : formatDecimalPtBr(dayGoalValue)}" ${isDayOff ? 'disabled' : ''} />
-          <input class="summary-done-input" data-day="${day}" type="text" inputmode="decimal" value="${formatDecimalPtBr(dayDoneValue)}" readonly ${isDayOff ? 'disabled' : ''} />
+          <input class="summary-done-input" data-day="${day}" type="text" inputmode="decimal" value="${formatDecimalPtBr(dayDoneValue)}" ${isDayOff ? 'disabled' : ''} />
           <button class="summary-dayoff-toggle ${isDayOff ? 'active' : 'inactive'}" data-day="${day}" type="button">${isDayOff ? 'Folga' : 'Trabalhar'}</button>
         </div>
       `);
@@ -2066,6 +2603,74 @@ saveGoalButton.addEventListener('click', (event) => {
 });
 
 const bindAuthUi = () => {
+  adminNotesToolbarButtons.forEach((button) => {
+    button.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+    });
+
+    button.addEventListener('click', () => {
+      if (!adminNotesEditorEl) return;
+      const command = button.dataset.noteCmd;
+      const value = button.dataset.noteValue || null;
+      adminNotesEditorEl.focus();
+      document.execCommand(command, false, value);
+      ensureAdminNotesEditorHasContent();
+    });
+  });
+
+  adminNotesInsertTableButton?.addEventListener('mousedown', (event) => {
+    event.preventDefault();
+  });
+
+  adminNotesInsertTableButton?.addEventListener('click', () => {
+    if (!adminNotesEditorEl) return;
+    const rows = Number(window.prompt('Quantidade de linhas da tabela:', '14'));
+    const cols = Number(window.prompt('Quantidade de colunas da tabela:', '5'));
+    if (!Number.isFinite(rows) || !Number.isFinite(cols)) return;
+
+    adminNotesEditorEl.focus();
+    const tableMarkup = createNotesTableMarkup(rows, cols);
+    document.execCommand('insertHTML', false, tableMarkup);
+    ensureAdminNotesEditorHasContent();
+  });
+
+  adminNotesInsertMonthTemplateButton?.addEventListener('mousedown', (event) => {
+    event.preventDefault();
+  });
+
+  adminNotesInsertMonthTemplateButton?.addEventListener('click', () => {
+    if (!adminNotesEditorEl) return;
+
+    const defaultMonth = `Mês ${monthNames[new Date().getMonth()].replace(/^./, (letter) => letter.toUpperCase())}`;
+    const monthLabel = window.prompt('Titulo do modelo:', defaultMonth);
+    if (monthLabel === null) return;
+
+    const headerInput = window.prompt(
+      'Nomes das colunas separados por vírgula:',
+      'Nathan, Mauricio, Lene, Isaque, Saldo'
+    );
+    if (headerInput === null) return;
+
+    const headers = String(headerInput)
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => Boolean(entry));
+
+    adminNotesEditorEl.focus();
+    const templateMarkup = createMonthlyNotesTemplateMarkup({ monthLabel, headers });
+    document.execCommand('insertHTML', false, templateMarkup);
+    ensureAdminNotesEditorHasContent();
+    setAdminNotesMessage('Modelo mensal inserido. Ajuste os campos e salve as notas.', 'success');
+  });
+
+  adminNotesEditorEl?.addEventListener('input', () => {
+    setAdminNotesMessage('Edicao pendente. Clique em "Salvar notas" para gravar.');
+  });
+
+  adminNotesSaveButton?.addEventListener('click', async () => {
+    await saveAdminNotes();
+  });
+
   authTabs.forEach((tab) => {
     tab.addEventListener('click', () => {
       const isRegister = tab.dataset.authTab === 'register';
@@ -2102,6 +2707,11 @@ const bindAuthUi = () => {
       return;
     }
 
+    if (!EMAIL_REGEX.test(email)) {
+      setAuthMessage('Informe um email valido.');
+      return;
+    }
+
     const response = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2126,8 +2736,12 @@ const bindAuthUi = () => {
       await importLegacyPersonalExpensesIfNeeded();
       loadRecords();
       renderPersonalExpenses();
+      if (isPersonalProfile()) {
+        await loadPersonalSheet(personalSheetState.year);
+      }
     }
     await loadAdminUsers();
+    await loadAdminNotes();
   });
 
   authRegisterForm?.addEventListener('submit', async (event) => {
@@ -2135,9 +2749,15 @@ const bindAuthUi = () => {
     const name = document.getElementById('auth-register-name')?.value?.trim() || '';
     const email = document.getElementById('auth-register-email')?.value?.trim() || '';
     const password = document.getElementById('auth-register-password')?.value || '';
+    const profileType = authRegisterProfileSelect?.value || '';
 
-    if (!name || !email || password.length < 6) {
-      setAuthMessage('Preencha nome, email e senha com no minimo 6 caracteres.');
+    if (!name || !email || password.length < 6 || !profileType) {
+      setAuthMessage('Preencha nome, email, perfil e senha com no minimo 6 caracteres.');
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(email)) {
+      setAuthMessage('Informe um email valido.');
       return;
     }
 
@@ -2149,7 +2769,7 @@ const bindAuthUi = () => {
     const response = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password })
+      body: JSON.stringify({ name, email, password, profileType })
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -2170,9 +2790,13 @@ const bindAuthUi = () => {
       await importLegacyPersonalExpensesIfNeeded();
       loadRecords();
       renderPersonalExpenses();
+      if (isPersonalProfile()) {
+        await loadPersonalSheet(personalSheetState.year);
+      }
     }
     await refreshRegisterAvailability();
     await loadAdminUsers();
+    await loadAdminNotes();
   });
 
   authForgotForm?.addEventListener('submit', async (event) => {
@@ -2180,6 +2804,11 @@ const bindAuthUi = () => {
     const email = document.getElementById('auth-forgot-email')?.value?.trim() || '';
     if (!email) {
       setAuthMessage('Informe o email da conta.');
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(email)) {
+      setAuthMessage('Informe um email valido.');
       return;
     }
 
@@ -2209,6 +2838,11 @@ const bindAuthUi = () => {
 
     if (!email || !token || password.length < 6) {
       setAuthMessage('Preencha email, token e nova senha com no minimo 6 caracteres.');
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(email)) {
+      setAuthMessage('Informe um email valido.');
       return;
     }
     if (password !== passwordConfirm) {
@@ -2338,6 +2972,7 @@ const bootstrapAuth = async () => {
   await loadPersonalExpenses();
   await importLegacyPersonalExpensesIfNeeded();
   await loadAdminUsers();
+  await loadAdminNotes();
   init();
 };
 
@@ -2346,6 +2981,8 @@ const init = () => {
   hasBootstrappedApp = true;
   recordDate.value = new Date().toISOString().substring(0, 10);
   populateMonthSelect();
+  populatePersonalSheetYearSelect();
+  populatePersonalSheetMonthSelect();
   populatePersonalMonthFilter();
   renderPersonalCategorySuggestions();
   const savedGoal = getMonthlyGoal();
@@ -2387,6 +3024,11 @@ const init = () => {
   renderPersonalExpenses();
   renderDashboardDueReminders();
   loadRecords();
+  if (isPersonalProfile()) {
+    loadPersonalSheet(personalSheetState.year).catch(() => {
+      showAppToast('Nao foi possivel carregar a planilha pessoal.', 'error');
+    });
+  }
 };
 
 bootstrapAuth();

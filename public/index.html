@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Nt Driver</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20260409-1" />
 </head>
 <body>
   <div id="auth-gate" class="auth-gate">
@@ -17,6 +17,8 @@
         <button type="button" class="auth-tab active" data-auth-tab="login">Entrar</button>
         <button type="button" class="auth-tab" data-auth-tab="register">Cadastrar</button>
       </div>
+
+      <p class="auth-security-note">Acesso apenas com conta autorizada.</p>
 
       <form id="auth-login-form" class="auth-form active" novalidate>
         <label for="auth-login-email">Email</label>
@@ -32,6 +34,12 @@
         <input id="auth-register-name" type="text" autocomplete="name" placeholder="Seu nome" required />
         <label for="auth-register-email">Email</label>
         <input id="auth-register-email" type="email" autocomplete="email" placeholder="voce@email.com" required />
+        <label for="auth-register-profile">Perfil</label>
+        <select id="auth-register-profile" required>
+          <option value="driver">Motorista de App</option>
+          <option value="personal">Financeiro Pessoal</option>
+        </select>
+        <small class="auth-helper-text">Depois de criar a conta, o perfil nao pode ser alterado.</small>
         <label for="auth-register-password">Senha</label>
         <input id="auth-register-password" type="password" autocomplete="new-password" placeholder="Minimo 6 caracteres" required />
         <button type="submit" class="auth-submit">Criar conta</button>
@@ -79,7 +87,9 @@
         <button class="nav-btn" data-page="history">Histórico</button>
         <button class="nav-btn" data-page="performance">Desempenho</button>
         <button class="nav-btn" data-page="summary">Metas</button>
-        <button class="nav-btn" data-page="personal-expenses">Despesas Pessoais</button>
+        <button class="nav-btn" data-page="personal-sheet">Receitas</button>
+        <button class="nav-btn" data-page="personal-expenses">Despesas</button>
+        <button id="admin-notes-nav-btn" class="nav-btn admin-only" data-page="admin-notes">Bloco de notas</button>
         <button id="admin-users-nav-btn" class="nav-btn admin-only" data-page="admin-users">Usuarios</button>
       </nav>
       
@@ -443,13 +453,73 @@
 
       </section>
 
+      <section id="personal-sheet" class="page">
+        <div class="page-header personal-sheet-header">
+          <h1>Receitas</h1>
+          <div class="personal-sheet-filters">
+            <div class="filter-group">
+              <label for="personal-sheet-month">Mês</label>
+              <select id="personal-sheet-month"></select>
+            </div>
+            <div class="filter-group">
+              <label for="personal-sheet-year">Ano</label>
+              <select id="personal-sheet-year"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="personal-summary-cards-grid">
+          <div class="card green">
+            <span>Entradas</span>
+            <strong id="personal-incomes">R$ 0,00</strong>
+          </div>
+          <div class="card blue">
+            <span>Pagos</span>
+            <strong id="personal-paid">R$ 0,00</strong>
+          </div>
+          <div class="card red">
+            <span>Pendentes</span>
+            <strong id="personal-pending">R$ 0,00</strong>
+          </div>
+          <div class="card red">
+            <span>Total</span>
+            <strong id="personal-expenses-total">R$ 0,00</strong>
+          </div>
+        </div>
+
+        <div class="card personal-sheet-card">
+          <div class="personal-sheet-toolbar">
+            <div class="personal-sheet-add-row">
+              <input id="personal-sheet-input-description" type="text" placeholder="Linha de receita" />
+              <input id="personal-sheet-input-day" type="date" placeholder="Data" />
+              <input id="personal-sheet-input-value" type="text" inputmode="decimal" placeholder="0,00" />
+              <button id="personal-sheet-add-income" type="button" class="table-add-button">Adicionar</button>
+            </div>
+          </div>
+
+          <div class="personal-sheet-table-wrap">
+            <table class="personal-table personal-sheet-table">
+              <thead>
+                <tr>
+                  <th>Descrição</th>
+                  <th>Data</th>
+                  <th>Valor</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="personal-sheet-income-rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <section id="personal-expenses" class="page">
         <div class="page-header">
-          <h1>Despesas Pessoais</h1>
+          <h1>Despesas</h1>
         </div>
 
         <div class="personal-tabs" role="tablist" aria-label="Abas de despesas pessoais">
-          <button type="button" class="personal-tab-btn active" data-personal-tab="overview" aria-selected="true">
+          <button type="button" class="personal-tab-btn driver-only active" data-personal-tab="summary" aria-selected="true">
             <span class="tab-icon tab-icon-overview" aria-hidden="true"></span>
             <span>Resumo</span>
           </button>
@@ -463,23 +533,23 @@
           </button>
         </div>
 
-        <div class="personal-tab-panel active" data-personal-panel="overview">
+        <div class="personal-tab-panel driver-only active" data-personal-panel="summary">
           <div class="personal-summary-cards-grid">
             <div class="card green">
               <span>Entradas</span>
-              <strong id="personal-incomes">R$ 0,00</strong>
+              <strong id="driver-personal-incomes">R$ 0,00</strong>
             </div>
             <div class="card blue">
               <span>Pagos</span>
-              <strong id="personal-paid">R$ 0,00</strong>
+              <strong id="driver-personal-paid">R$ 0,00</strong>
             </div>
             <div class="card red">
               <span>Pendentes</span>
-              <strong id="personal-pending">R$ 0,00</strong>
+              <strong id="driver-personal-pending">R$ 0,00</strong>
             </div>
             <div class="card red">
               <span>Total</span>
-              <strong id="personal-expenses-total">R$ 0,00</strong>
+              <strong id="driver-personal-expenses-total">R$ 0,00</strong>
             </div>
           </div>
         </div>
@@ -544,10 +614,6 @@
                 <h2>Despesas por Categoria</h2>
                 <canvas id="personal-pie"></canvas>
               </div>
-              <div class="chart-block">
-                <h2>Gastos por Dia</h2>
-                <canvas id="personal-bar"></canvas>
-              </div>
             </div>
           </div>
         </div>
@@ -586,6 +652,31 @@
           </div>
         </div>
       </section>
+
+      <section id="admin-notes" class="page">
+        <div class="page-header">
+          <h1>Bloco de notas</h1>
+        </div>
+        <div class="card admin-notes-card">
+          <p class="admin-notes-description">Espaco privado do administrador para montar tabelas, listas e anotacoes do mes.</p>
+          <div class="admin-notes-toolbar" role="toolbar" aria-label="Ferramentas do bloco de notas">
+            <button type="button" class="admin-notes-toolbar-btn" data-note-cmd="bold"><strong>B</strong></button>
+            <button type="button" class="admin-notes-toolbar-btn" data-note-cmd="italic"><em>I</em></button>
+            <button type="button" class="admin-notes-toolbar-btn" data-note-cmd="underline"><u>U</u></button>
+            <button type="button" class="admin-notes-toolbar-btn" data-note-cmd="insertUnorderedList">Lista</button>
+            <button type="button" class="admin-notes-toolbar-btn" data-note-cmd="insertOrderedList">Numerada</button>
+            <button type="button" class="admin-notes-toolbar-btn" data-note-cmd="formatBlock" data-note-value="h2">Titulo</button>
+            <button type="button" class="admin-notes-toolbar-btn" data-note-cmd="formatBlock" data-note-value="p">Texto</button>
+            <button type="button" class="admin-notes-toolbar-btn" id="admin-notes-insert-table-btn">Tabela</button>
+            <button type="button" class="admin-notes-toolbar-btn" id="admin-notes-insert-month-template-btn">Modelo mensal</button>
+          </div>
+          <div id="admin-notes-editor" class="admin-notes-editor" contenteditable="true" aria-label="Editor do bloco de notas"></div>
+          <div class="admin-notes-actions">
+            <button type="button" id="admin-notes-save-btn" class="auth-submit">Salvar notas</button>
+            <p id="admin-notes-message" class="admin-notes-message" aria-live="polite"></p>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
   <div id="password-modal" class="password-modal hidden" aria-hidden="true">
@@ -609,6 +700,6 @@
   <div id="app-toast" class="app-toast" role="status" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="script.js"></script>
+  <script src="script.js?v=20260409-1"></script>
 </body>
 </html>

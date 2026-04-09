@@ -16,6 +16,7 @@ const SMTP_SECURE = String(process.env.SMTP_SECURE || 'false') === 'true';
 const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
 const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER || 'no-reply@ntdriver.local';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
 
 const hasSmtpConfig = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS);
 const mailTransport = hasSmtpConfig
@@ -31,6 +32,12 @@ const mailTransport = hasSmtpConfig
   : null;
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+const isValidEmail = (email) => EMAIL_REGEX.test(String(email || ''));
+const normalizeProfileType = (value) => {
+  const profile = String(value || '').trim().toLowerCase();
+  if (profile === 'driver' || profile === 'personal') return profile;
+  return '';
+};
 
 const hashResetToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
@@ -40,7 +47,7 @@ const getUsersCount = async () => {
 };
 
 const getUserById = async (id) => db.get(
-  'SELECT id, name, email, is_admin FROM users WHERE id = $1',
+  'SELECT id, name, email, is_admin, profile_type FROM users WHERE id = $1',
   [id]
 );
 
@@ -49,6 +56,7 @@ const assignSessionUser = (req, user) => {
   req.session.userName = user.name;
   req.session.userEmail = user.email;
   req.session.isAdmin = Boolean(user.is_admin);
+  req.session.profileType = String(user.profile_type || 'driver');
 };
 
 const sendResetEmail = async (email, link) => {
@@ -78,13 +86,14 @@ router.get('/register-status', async (req, res) => {
 });
 
 router.post('/register', async (req, res) => {
-  const { name, email, password } = req.body || {};
+  const { name, email, password, profileType } = req.body || {};
   const normalizedName = String(name || '').trim();
   const normalizedEmail = normalizeEmail(email);
   const rawPassword = String(password || '');
+  const normalizedProfileType = normalizeProfileType(profileType);
 
-  if (!normalizedName || !normalizedEmail || rawPassword.length < 6) {
-    return res.status(400).json({ error: 'Informe nome, email e senha com ao menos 6 caracteres.' });
+  if (!normalizedName || !normalizedEmail || rawPassword.length < 6 || !normalizedProfileType || !isValidEmail(normalizedEmail)) {
+    return res.status(400).json({ error: 'Informe nome, email, perfil valido e senha com ao menos 6 caracteres.' });
   }
 
   try {
@@ -98,15 +107,16 @@ router.post('/register', async (req, res) => {
 
     const passwordHash = await bcrypt.hash(rawPassword, 10);
     const result = await db.query(
-      'INSERT INTO users (name, email, password_hash, is_admin) VALUES ($1, $2, $3, $4) RETURNING id',
-      [normalizedName, normalizedEmail, passwordHash, shouldBeAdmin]
+      'INSERT INTO users (name, email, password_hash, is_admin, profile_type) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [normalizedName, normalizedEmail, passwordHash, shouldBeAdmin, normalizedProfileType]
     );
 
     const user = {
       id: result.rows[0]?.id || null,
       name: normalizedName,
       email: normalizedEmail,
-      is_admin: shouldBeAdmin
+      is_admin: shouldBeAdmin,
+      profile_type: normalizedProfileType
     };
     assignSessionUser(req, user);
 
@@ -115,7 +125,8 @@ router.post('/register', async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        isAdmin: Boolean(user.is_admin)
+        isAdmin: Boolean(user.is_admin),
+        profileType: String(user.profile_type || 'driver')
       }
     });
   } catch (error) {
@@ -131,13 +142,13 @@ router.post('/login', async (req, res) => {
   const normalizedEmail = normalizeEmail(email);
   const rawPassword = String(password || '');
 
-  if (!normalizedEmail || !rawPassword) {
+  if (!normalizedEmail || !rawPassword || !isValidEmail(normalizedEmail)) {
     return res.status(400).json({ error: 'Informe email e senha.' });
   }
 
   try {
     const user = await db.get(
-      'SELECT id, name, email, password_hash, is_admin FROM users WHERE email = $1',
+      'SELECT id, name, email, password_hash, is_admin, profile_type FROM users WHERE email = $1',
       [normalizedEmail]
     );
 
@@ -157,7 +168,8 @@ router.post('/login', async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        isAdmin: Boolean(user.is_admin)
+        isAdmin: Boolean(user.is_admin),
+        profileType: String(user.profile_type || 'driver')
       }
     });
   } catch (error) {
@@ -203,7 +215,7 @@ router.post('/change-password', requireAuth, async (req, res) => {
 
 router.post('/forgot-password', async (req, res) => {
   const normalizedEmail = normalizeEmail(req.body?.email);
-  if (!normalizedEmail) {
+  if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
     return res.json({ ok: true, message: 'Se o email existir, enviaremos instrucoes de recuperacao.' });
   }
 
@@ -247,7 +259,7 @@ router.post('/reset-password', async (req, res) => {
   const token = String(req.body?.token || '').trim();
   const newPassword = String(req.body?.newPassword || '');
 
-  if (!normalizedEmail || !token || newPassword.length < 6) {
+  if (!normalizedEmail || !token || newPassword.length < 6 || !isValidEmail(normalizedEmail)) {
     return res.status(400).json({ error: 'Dados invalidos para redefinir senha.' });
   }
 
@@ -286,7 +298,7 @@ router.post('/reset-password', async (req, res) => {
 router.get('/users', requireAdmin, async (req, res) => {
   try {
     const rows = await db.all(
-      'SELECT id, name, email, is_admin, created_at FROM users ORDER BY id ASC'
+      'SELECT id, name, email, is_admin, profile_type, created_at FROM users ORDER BY id ASC'
     );
     return res.json(rows || []);
   } catch (error) {
@@ -299,16 +311,17 @@ router.post('/users', requireAdmin, async (req, res) => {
   const email = normalizeEmail(req.body?.email);
   const password = String(req.body?.password || '');
   const isAdmin = Boolean(req.body?.isAdmin);
+  const normalizedProfileType = normalizeProfileType(req.body?.profileType) || 'driver';
 
-  if (!name || !email || password.length < 6) {
+  if (!name || !email || password.length < 6 || !isValidEmail(email)) {
     return res.status(400).json({ error: 'Informe nome, email e senha com ao menos 6 caracteres.' });
   }
 
   try {
     const passwordHash = await bcrypt.hash(password, 10);
     const result = await db.query(
-      'INSERT INTO users (name, email, password_hash, is_admin) VALUES ($1, $2, $3, $4) RETURNING id',
-      [name, email, passwordHash, isAdmin]
+      'INSERT INTO users (name, email, password_hash, is_admin, profile_type) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [name, email, passwordHash, isAdmin, normalizedProfileType]
     );
     return res.status(201).json({ id: result.rows[0]?.id || null });
   } catch (error) {
@@ -389,7 +402,8 @@ router.get('/me', requireAuth, async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        isAdmin: Boolean(user.is_admin)
+        isAdmin: Boolean(user.is_admin),
+        profileType: String(user.profile_type || 'driver')
       }
     });
   } catch (error) {
