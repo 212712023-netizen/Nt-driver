@@ -149,6 +149,7 @@ const PERSONAL_EXPENSES_KEY = 'nt-driver-personal-expenses';
 const PERSONAL_EXPENSES_MIGRATED_KEY = 'nt-driver-personal-expenses-migrated';
 const SUMMARY_DAILY_GOALS_KEY = 'nt-driver-summary-daily-goals';
 const SUMMARY_DAILY_GOALS_RESET_FLAG_KEY = 'nt-driver-summary-daily-goals-reset-v2';
+const ACTIVE_PAGE_KEY = 'nt-driver-active-page';
 
 let personalExpensesCache = [];
 
@@ -1213,8 +1214,24 @@ const setActivePage = (pageId) => {
   if (!targetPage) return;
   pages.forEach((page) => page.classList.toggle('active', page.id === pageId));
   navButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.page === pageId));
+  try {
+    localStorage.setItem(ACTIVE_PAGE_KEY, pageId);
+  } catch (error) {
+    // Ignora falha de persistencia da aba ativa.
+  }
   if (pageId === 'admin-users') {
     loadAdminUsers();
+  }
+};
+
+const getSavedActivePage = () => {
+  try {
+    const savedPage = localStorage.getItem(ACTIVE_PAGE_KEY);
+    if (!savedPage) return 'dashboard';
+    const exists = Array.from(pages).some((page) => page.id === savedPage);
+    return exists ? savedPage : 'dashboard';
+  } catch (error) {
+    return 'dashboard';
   }
 };
 
@@ -2175,6 +2192,7 @@ const init = () => {
       setActivePerformanceTab(button.dataset.performanceTab);
     });
   });
+  setActivePage(getSavedActivePage());
   setActivePersonalTab('overview');
   setActivePerformanceTab('day');
   renderPersonalExpenses();
