@@ -1100,7 +1100,7 @@ const savePersonalExpenses = async (items) => {
 
 const renderPersonalExpenses = () => {
   const allItems = getPersonalExpenses();
-  renderPersonalCategorySuggestions(allItems.map((item) => item.category));
+  renderPersonalCategorySuggestions();
   const selectedMonth = personalFilterMonth?.value || getCurrentYearMonth();
   const monthContext = selectedMonth;
   const items = allItems.filter((item) => isPersonalExpenseVisibleInMonth(item, selectedMonth));
