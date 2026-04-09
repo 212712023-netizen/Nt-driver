@@ -304,15 +304,24 @@ const renderAdminUsers = (users) => {
   }
 
   adminUsersListEl.innerHTML = list
-    .map((user) => `
-      <tr>
-        <td>${user.name || '-'}</td>
-        <td>${user.email || '-'}</td>
-        <td>${user.is_admin ? 'Admin' : 'Membro'}</td>
-        <td>${String(user.created_at || '').slice(0, 10) || '-'}</td>
-        <td><button type="button" class="admin-reset-btn" data-user-id="${user.id}" data-user-email="${user.email || ''}">Resetar senha</button></td>
-      </tr>
-    `)
+    .map((user) => {
+      const isCurrentUser = Number(user.id) === Number(currentSessionUser?.id || 0);
+      const actions = isCurrentUser
+        ? '<span>Sua conta</span>'
+        : `
+            <button type="button" class="admin-reset-btn" data-user-id="${user.id}" data-user-email="${user.email || ''}">Resetar senha</button>
+            <button type="button" class="admin-delete-btn" data-user-id="${user.id}" data-user-email="${user.email || ''}">Excluir</button>
+          `;
+      return `
+        <tr>
+          <td>${user.name || '-'}</td>
+          <td>${user.email || '-'}</td>
+          <td>${user.is_admin ? 'Admin' : 'Membro'}</td>
+          <td>${String(user.created_at || '').slice(0, 10) || '-'}</td>
+          <td>${actions}</td>
+        </tr>
+      `;
+    })
     .join('');
 
   adminUsersListEl.querySelectorAll('.admin-reset-btn').forEach((button) => {
@@ -341,6 +350,30 @@ const renderAdminUsers = (users) => {
 
       setAdminUsersMessage('Senha resetada com sucesso.', 'success');
       showAppToast('Senha do usuario atualizada.');
+    });
+  });
+
+  adminUsersListEl.querySelectorAll('.admin-delete-btn').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const userId = Number(button.dataset.userId || 0);
+      const userEmail = String(button.dataset.userEmail || '').trim();
+      if (!userId) return;
+
+      const confirmed = window.confirm(`Tem certeza que deseja excluir o usuario ${userEmail}?`);
+      if (!confirmed) return;
+
+      const response = await apiFetch(`/api/auth/users/${userId}`, {
+        method: 'DELETE'
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setAdminUsersMessage(payload?.error || 'Falha ao excluir usuario.');
+        return;
+      }
+
+      setAdminUsersMessage('Usuario excluido com sucesso.', 'success');
+      showAppToast('Usuario removido.');
+      await loadAdminUsers();
     });
   });
 };

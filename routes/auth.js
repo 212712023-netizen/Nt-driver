@@ -341,6 +341,41 @@ router.post('/users/:id/reset-password', requireAdmin, async (req, res) => {
   }
 });
 
+router.delete('/users/:id', requireAdmin, async (req, res) => {
+  const userId = Number(req.params.id);
+
+  if (!Number.isFinite(userId) || userId <= 0) {
+    return res.status(400).json({ error: 'Usuario invalido.' });
+  }
+
+  if (Number(req.session.userId) === userId) {
+    return res.status(400).json({ error: 'Voce nao pode excluir sua propria conta.' });
+  }
+
+  try {
+    const targetUser = await db.get('SELECT id, is_admin FROM users WHERE id = $1', [userId]);
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Usuario nao encontrado.' });
+    }
+
+    if (targetUser.is_admin) {
+      const adminCount = await db.get('SELECT COUNT(*)::int AS count FROM users WHERE is_admin = TRUE');
+      if (Number(adminCount?.count || 0) <= 1) {
+        return res.status(400).json({ error: 'Nao e permitido excluir o ultimo administrador.' });
+      }
+    }
+
+    const result = await db.query('DELETE FROM users WHERE id = $1', [userId]);
+    if ((result.rowCount || 0) <= 0) {
+      return res.status(404).json({ error: 'Usuario nao encontrado.' });
+    }
+
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ error: 'Falha ao excluir usuario.' });
+  }
+});
+
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const user = await getUserById(req.session.userId);
