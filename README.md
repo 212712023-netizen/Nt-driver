@@ -38,6 +38,7 @@ No seu caso: `C:\Users\natha\Nt driver`
 - `DATABASE_URL`: URL do PostgreSQL/Supabase
 - `APP_BASE_URL`: URL publica do app (ou localhost em desenvolvimento)
 - `SESSION_TABLE_NAME`: opcional, nome da tabela de sessao no PostgreSQL (padrao: `user_sessions`)
+- `PUBLIC_REGISTER_ENABLED`: `true` para liberar cadastro na tela de login mesmo com usuarios existentes
 
 ## Deploy basico (backend + frontend juntos)
 

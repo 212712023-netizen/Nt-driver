@@ -9,6 +9,7 @@ const router = express.Router();
 
 const RESET_TOKEN_MINUTES = 30;
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3000';
+const PUBLIC_REGISTER_ENABLED = String(process.env.PUBLIC_REGISTER_ENABLED || 'false') === 'true';
 const SMTP_HOST = process.env.SMTP_HOST || '';
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
 const SMTP_SECURE = String(process.env.SMTP_SECURE || 'false') === 'true';
@@ -69,7 +70,7 @@ router.get('/register-status', async (req, res) => {
   try {
     const count = await getUsersCount();
     return res.json({
-      publicRegisterEnabled: count === 0
+      publicRegisterEnabled: PUBLIC_REGISTER_ENABLED || count === 0
     });
   } catch (error) {
     return res.status(500).json({ error: 'Falha ao verificar cadastro.' });
@@ -88,7 +89,7 @@ router.post('/register', async (req, res) => {
 
   try {
     const count = await getUsersCount();
-    if (count > 0) {
+    if (!PUBLIC_REGISTER_ENABLED && count > 0) {
       return res.status(403).json({ error: 'Cadastro publico desativado. Solicite acesso ao administrador.' });
     }
 
