@@ -93,17 +93,20 @@ router.post('/register', async (req, res) => {
       return res.status(403).json({ error: 'Cadastro publico desativado. Solicite acesso ao administrador.' });
     }
 
+    // Apenas o primeiro usuario do sistema vira admin automaticamente.
+    const shouldBeAdmin = count === 0;
+
     const passwordHash = await bcrypt.hash(rawPassword, 10);
     const result = await db.query(
-      'INSERT INTO users (name, email, password_hash, is_admin) VALUES ($1, $2, $3, TRUE) RETURNING id',
-      [normalizedName, normalizedEmail, passwordHash]
+      'INSERT INTO users (name, email, password_hash, is_admin) VALUES ($1, $2, $3, $4) RETURNING id',
+      [normalizedName, normalizedEmail, passwordHash, shouldBeAdmin]
     );
 
     const user = {
       id: result.rows[0]?.id || null,
       name: normalizedName,
       email: normalizedEmail,
-      is_admin: true
+      is_admin: shouldBeAdmin
     };
     assignSessionUser(req, user);
 
@@ -112,7 +115,7 @@ router.post('/register', async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        isAdmin: true
+        isAdmin: Boolean(user.is_admin)
       }
     });
   } catch (error) {
