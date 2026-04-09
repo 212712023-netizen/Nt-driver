@@ -2102,3 +2102,48 @@ nav {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 900px) {
+  .summary-grid.dashboard-summary-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .personal-summary-cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .summary-grid.dashboard-summary-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .personal-summary-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-summary-cards .card,
+  .personal-summary-cards-grid .card,
+  .mini-card {
+    padding: 16px;
+    min-width: 0;
+  }
+
+  .dashboard-summary-cards .card strong,
+  .personal-summary-cards-grid .card strong,
+  .mini-card strong {
+    font-size: clamp(1.5rem, 8vw, 2rem);
+    line-height: 1.15;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .dashboard-summary-cards .card span,
+  .personal-summary-cards-grid .card span,
+  .mini-card span {
+    margin-bottom: 8px;
+  }
+}
