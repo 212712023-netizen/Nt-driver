@@ -22,6 +22,7 @@ body {
   font-family: Inter, system-ui, sans-serif;
   color: var(--text);
   background: linear-gradient(180deg, #dbeafe 0%, #f0f6ff 100%);
+  overflow-x: hidden;
 }
 
 button,
@@ -1941,6 +1942,47 @@ nav {
     grid-template-columns: 1fr;
   }
 
+  .sidebar {
+    min-width: 0;
+    width: 100%;
+    padding: 16px 14px;
+    gap: 12px;
+    border-right: none;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  }
+
+  .sidebar .brand-logo-image {
+    width: 160px;
+  }
+
+  .sidebar-user-row {
+    width: 100%;
+  }
+
+  nav {
+    flex-direction: row;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nav-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 10px 14px;
+    border-radius: 12px;
+  }
+
+  .nav-btn:hover,
+  .nav-btn.active {
+    transform: none;
+  }
+
+  .content {
+    padding: 18px 14px;
+  }
+
   .chart-section {
     grid-template-columns: 1fr;
   }
@@ -2038,10 +2080,9 @@ nav {
   }
 
   .sidebar {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 12px;
-    justify-content: center;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
   }
 
   .page-header {
