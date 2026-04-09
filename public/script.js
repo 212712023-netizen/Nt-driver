@@ -102,6 +102,7 @@ const addPersonalExpenseButton = document.getElementById('add-personal-expense')
 const personalEntryDescriptionInput = document.getElementById('personal-entry-description');
 const personalEntryAmountInput = document.getElementById('personal-entry-amount');
 const personalEntryCategorySelect = document.getElementById('personal-entry-category');
+const personalCategorySuggestionsEl = document.getElementById('personal-category-suggestions');
 const personalEntryDueDayInput = document.getElementById('personal-entry-due-day');
 const personalEntryInstallmentsInput = document.getElementById('personal-entry-installments');
 const personalEntryFixedSelect = document.getElementById('personal-entry-fixed');
@@ -152,6 +153,8 @@ const SUMMARY_DAILY_GOALS_RESET_FLAG_KEY = 'nt-driver-summary-daily-goals-reset-
 const ACTIVE_PAGE_KEY = 'nt-driver-active-page';
 const ACTIVE_PERFORMANCE_TAB_KEY = 'nt-driver-active-performance-tab';
 const ACTIVE_PERSONAL_TAB_KEY = 'nt-driver-active-personal-tab';
+const PERSONAL_CATEGORY_SUGGESTIONS_KEY_PREFIX = 'nt-driver-personal-category-suggestions';
+const PERSONAL_CATEGORY_SUGGESTIONS_LIMIT = 30;
 
 let personalExpensesCache = [];
 
@@ -184,6 +187,116 @@ const parseCurrencyInput = (value) => {
   const normalized = String(value).trim().replace(/\./g, '').replace(',', '.');
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const escapeHtml = (value) => String(value)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+const normalizePersonalCategory = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return 'Outros';
+
+  const normalizedLower = raw.toLocaleLowerCase('pt-BR');
+  const keyMatch = Object.keys(PERSONAL_CATEGORY_LABELS)
+    .find((key) => key.toLocaleLowerCase('pt-BR') === normalizedLower);
+  if (keyMatch) return PERSONAL_CATEGORY_LABELS[keyMatch];
+
+  const labelMatch = Object.values(PERSONAL_CATEGORY_LABELS)
+    .find((label) => label.toLocaleLowerCase('pt-BR') === normalizedLower);
+  if (labelMatch) return labelMatch;
+
+  return raw;
+};
+
+const getPersonalCategorySuggestionsStorageKey = () => {
+  if (!currentSessionUser || currentSessionUser.isAdmin) return null;
+  const userScope = currentSessionUser?.id ? String(currentSessionUser.id) : 'anon';
+  return `${PERSONAL_CATEGORY_SUGGESTIONS_KEY_PREFIX}-${userScope}`;
+};
+
+const getDefaultPersonalCategorySuggestions = () => {
+  const unique = new Set(Object.values(PERSONAL_CATEGORY_LABELS));
+  return Array.from(unique);
+};
+
+const getStoredPersonalCategorySuggestions = () => {
+  const storageKey = getPersonalCategorySuggestionsStorageKey();
+  if (!storageKey) return [];
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => normalizePersonalCategory(entry))
+      .filter((entry) => Boolean(entry));
+  } catch (error) {
+    return [];
+  }
+};
+
+const setStoredPersonalCategorySuggestions = (entries) => {
+  const storageKey = getPersonalCategorySuggestionsStorageKey();
+  if (!storageKey) return;
+  try {
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify(Array.isArray(entries) ? entries.slice(0, PERSONAL_CATEGORY_SUGGESTIONS_LIMIT) : [])
+    );
+  } catch (error) {
+    // Ignora falha de persistencia de sugestoes de categoria.
+  }
+};
+
+const buildPersonalCategorySuggestions = (extraEntries = []) => {
+  const isRegularUser = Boolean(currentSessionUser && !currentSessionUser.isAdmin);
+  const combined = [
+    ...(isRegularUser ? getStoredPersonalCategorySuggestions() : []),
+    ...getDefaultPersonalCategorySuggestions(),
+    ...(isRegularUser ? extraEntries : [])
+  ]
+    .map((entry) => normalizePersonalCategory(entry))
+    .filter((entry) => Boolean(entry));
+
+  const seen = new Set();
+  const finalEntries = [];
+  combined.forEach((entry) => {
+    const key = entry.toLocaleLowerCase('pt-BR');
+    if (seen.has(key)) return;
+    seen.add(key);
+    finalEntries.push(entry);
+  });
+
+  return finalEntries.slice(0, PERSONAL_CATEGORY_SUGGESTIONS_LIMIT);
+};
+
+const renderPersonalCategorySuggestions = (extraEntries = []) => {
+  if (!personalCategorySuggestionsEl) return;
+  const entries = buildPersonalCategorySuggestions(extraEntries);
+  personalCategorySuggestionsEl.innerHTML = entries
+    .map((entry) => `<option value="${escapeHtml(entry)}"></option>`)
+    .join('');
+};
+
+const rememberPersonalCategorySuggestion = (entry) => {
+  if (!currentSessionUser || currentSessionUser.isAdmin) return;
+  const normalizedEntry = normalizePersonalCategory(entry);
+  if (!normalizedEntry) return;
+  const entries = buildPersonalCategorySuggestions([normalizedEntry]);
+  setStoredPersonalCategorySuggestions(entries);
+  renderPersonalCategorySuggestions(entries);
+};
+
+const coerceCategoryForCurrentUser = (value) => {
+  const normalized = normalizePersonalCategory(value);
+  if (!currentSessionUser || !currentSessionUser.isAdmin) return normalized;
+
+  const validLabels = new Set(Object.values(PERSONAL_CATEGORY_LABELS).map((label) => label.toLocaleLowerCase('pt-BR')));
+  return validLabels.has(normalized.toLocaleLowerCase('pt-BR')) ? normalized : 'Outros';
 };
 
 const setText = (element, value) => {
@@ -931,9 +1044,9 @@ const getPersonalExpenseInput = (override = {}) => {
   const type = override.type ?? ((source === 'table'
     ? personalTypeSelect?.value
     : personalTypeSelect?.value) || 'saida');
-  const category = override.category ?? ((source === 'table'
+  const category = coerceCategoryForCurrentUser(override.category ?? ((source === 'table'
     ? personalEntryCategorySelect?.value
-    : personalCategorySelect?.value) || 'outros');
+    : personalCategorySelect?.value) || 'Outros'));
   const account = override.account ?? ((source === 'table'
     ? personalAccountSelect?.value
     : personalAccountSelect?.value) || 'outros');
@@ -987,6 +1100,7 @@ const savePersonalExpenses = async (items) => {
 
 const renderPersonalExpenses = () => {
   const allItems = getPersonalExpenses();
+  renderPersonalCategorySuggestions(allItems.map((item) => item.category));
   const selectedMonth = personalFilterMonth?.value || getCurrentYearMonth();
   const monthContext = selectedMonth;
   const items = allItems.filter((item) => isPersonalExpenseVisibleInMonth(item, selectedMonth));
@@ -1096,7 +1210,7 @@ const renderPersonalExpenses = () => {
         if (item.installments) personalEntryFixedSelect.value = '';
         else personalEntryFixedSelect.value = item.is_fixed === true ? 'sim' : 'nao';
       }
-      if (personalEntryCategorySelect) personalEntryCategorySelect.value = item.category || 'outros';
+      if (personalEntryCategorySelect) personalEntryCategorySelect.value = normalizePersonalCategory(item.category || 'Outros');
       if (personalEntryStatusSelect) personalEntryStatusSelect.value = item.status || 'pendente';
       if (addPersonalExpenseButton) addPersonalExpenseButton.textContent = 'Salvar';
       if (personalTableAddButton) personalTableAddButton.textContent = 'Salvar';
@@ -1109,7 +1223,8 @@ const renderPersonalExpenses = () => {
 
   sortedItems.forEach((item) => {
     if (item.type === 'saida') {
-      categories[item.category] = (categories[item.category] || 0) + Number(item.amount);
+      const normalizedCategory = normalizePersonalCategory(item.category);
+      categories[normalizedCategory] = (categories[normalizedCategory] || 0) + Number(item.amount);
       const day = item.date.slice(8, 10);
       days[day] = (days[day] || 0) + Number(item.amount);
     }
@@ -1211,6 +1326,8 @@ const addPersonalExpense = async (options = {}) => {
     return;
   }
 
+  rememberPersonalCategorySuggestion(category);
+
   const items = getPersonalExpenses();
   const updatedItem = {
     id: personalEditingId || Date.now(),
@@ -1269,10 +1386,10 @@ const addPersonalExpense = async (options = {}) => {
   ];
   resetPersonalInputs.forEach((input) => { if (input) input.value = ''; });
   if (personalTypeSelect) personalTypeSelect.value = 'saida';
-  if (personalCategorySelect) personalCategorySelect.value = 'alimentacao';
+  if (personalCategorySelect) personalCategorySelect.value = 'Alimentação';
   if (personalAccountSelect) personalAccountSelect.value = 'cartao';
   if (personalStatusSelect) personalStatusSelect.value = 'pendente';
-  if (personalEntryCategorySelect) personalEntryCategorySelect.value = 'alimentacao';
+  if (personalEntryCategorySelect) personalEntryCategorySelect.value = 'Alimentação';
   if (personalEntryFixedSelect) personalEntryFixedSelect.value = '';
   if (personalEntryStatusSelect) personalEntryStatusSelect.value = 'pendente';
 };
@@ -2230,6 +2347,7 @@ const init = () => {
   recordDate.value = new Date().toISOString().substring(0, 10);
   populateMonthSelect();
   populatePersonalMonthFilter();
+  renderPersonalCategorySuggestions();
   const savedGoal = getMonthlyGoal();
   setMonthlyGoal(savedGoal);
 
