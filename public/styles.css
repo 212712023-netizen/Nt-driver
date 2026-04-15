@@ -10,10 +10,50 @@
   --orange: #d97706;
   --input-bg: #ffffff;
   --border: rgba(100, 116, 139, 0.2);
+  /* Sidebar custom colors */
+  --sidebar-bg: #10182A;
+  --sidebar-foreground: #F3F6FC;
+  --sidebar-accent: #1E293B;
+  --sidebar-border: #22304A;
+  --primary: #2563eb;
+  --primary-foreground: #fff;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Sidebar custom classes */
+.bg-sidebar {
+  background: var(--sidebar-bg);
+}
+.text-sidebar-foreground {
+  color: var(--sidebar-foreground);
+}
+.bg-sidebar-accent {
+  background: var(--sidebar-accent);
+}
+.border-sidebar-border {
+  border-color: var(--sidebar-border);
+}
+.shadow-lg {
+  box-shadow: 0 8px 24px rgba(16, 24, 42, 0.18);
+}
+.text-primary {
+  color: var(--primary);
+}
+.bg-primary {
+  background: var(--primary);
+}
+.text-primary-foreground {
+  color: var(--primary-foreground);
+}
+
+/* Main content spacing for sidebar */
+.main-content {
+  margin-left: 260px; /* igual à largura do sidebar */
+  min-height: 100vh;
+  padding: 32px 24px 0 24px;
 }
 
 html,
@@ -2827,5 +2867,172 @@ nav {
 @media (max-width: 420px) {
   .personal-summary-cards-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Base44-like sidebar adaptation */
+.sidebar-mobile-open {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 1200;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #f8fafc;
+  font-size: 1.1rem;
+  display: none;
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.5);
+  z-index: 1090;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+
+.sidebar-header {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 0 2px;
+}
+
+.sidebar-brand-mark {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #2563eb 0%, #16a34a 100%);
+  color: #ffffff;
+  font-size: 1rem;
+}
+
+.sidebar-brand-copy h1 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1;
+  color: #0f172a;
+}
+
+.sidebar-brand-copy p {
+  margin: 3px 0 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.sidebar-mobile-close {
+  display: none;
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 1rem;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+.sidebar-collapse-btn {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: #f8fafc;
+  color: #334155;
+  width: 100%;
+  border-radius: 12px;
+  height: 38px;
+  margin-top: auto;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 92px 1fr;
+}
+
+.app-shell.sidebar-collapsed .sidebar {
+  min-width: 92px;
+  width: 92px;
+  padding: 18px 10px;
+}
+
+.app-shell.sidebar-collapsed .sidebar .brand,
+.app-shell.sidebar-collapsed .sidebar-user-row,
+.app-shell.sidebar-collapsed .nav-btn,
+.app-shell.sidebar-collapsed .sidebar-collapse-btn {
+  font-size: 0;
+}
+
+.app-shell.sidebar-collapsed .nav-btn {
+  padding: 12px;
+  text-align: center;
+}
+
+.app-shell.sidebar-collapsed .nav-btn::before {
+  content: attr(data-page);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: currentColor;
+}
+
+.app-shell.sidebar-collapsed .sidebar-collapse-btn::before {
+  content: '▶';
+  font-size: 0.9rem;
+}
+
+.app-shell.sidebar-collapsed .sidebar-collapse-btn {
+  background: #e2e8f0;
+}
+
+@media (max-width: 1000px) {
+  .sidebar-mobile-open {
+    display: grid;
+    place-items: center;
+  }
+
+  .sidebar-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 280px;
+    max-width: calc(100vw - 36px);
+    z-index: 1100;
+    transform: translateX(-102%);
+    transition: transform 0.24s ease;
+    overflow-y: auto;
+  }
+
+  .app-shell.sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .sidebar-header {
+    display: flex;
+  }
+
+  .sidebar-mobile-close {
+    display: inline-grid;
+    place-items: center;
+  }
+
+  .sidebar-collapse-btn {
+    display: none;
+  }
+
+  .content {
+    padding-top: 64px;
   }
 }

@@ -104,6 +104,7 @@ const initDb = async () => {
     CREATE TABLE IF NOT EXISTS personal_expenses (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      entry_key TEXT,
       description TEXT,
       amount DOUBLE PRECISION NOT NULL DEFAULT 0,
       type TEXT DEFAULT 'saida',
@@ -119,8 +120,42 @@ const initDb = async () => {
     )
   `);
 
+  await query('ALTER TABLE personal_expenses ADD COLUMN IF NOT EXISTS entry_key TEXT');
+  await query(`
+    WITH ranked AS (
+      SELECT
+        id,
+        ROW_NUMBER() OVER (
+          PARTITION BY
+            user_id,
+            COALESCE(description, ''),
+            amount,
+            COALESCE(type, 'saida'),
+            COALESCE(category, 'outros'),
+            COALESCE(account, 'outros'),
+            COALESCE(status, 'pendente'),
+            date,
+            COALESCE(due_day, -1),
+            COALESCE(installments, ''),
+            COALESCE(is_fixed::text, 'null'),
+            COALESCE(installments_start_month, '')
+          ORDER BY id DESC
+        ) AS duplicate_rank
+      FROM personal_expenses
+    )
+    DELETE FROM personal_expenses AS expenses
+    USING ranked
+    WHERE expenses.id = ranked.id
+      AND ranked.duplicate_rank > 1
+  `);
+  await query(`
+    UPDATE personal_expenses
+    SET entry_key = CONCAT('expense-', id)
+    WHERE entry_key IS NULL OR BTRIM(entry_key) = ''
+  `);
   await query('CREATE INDEX IF NOT EXISTS idx_personal_expenses_user_id ON personal_expenses(user_id)');
   await query('CREATE INDEX IF NOT EXISTS idx_personal_expenses_user_date ON personal_expenses(user_id, date)');
+  await query('CREATE UNIQUE INDEX IF NOT EXISTS idx_personal_expenses_user_entry_key ON personal_expenses(user_id, entry_key)');
 
   await query(`
     CREATE TABLE IF NOT EXISTS admin_notes (

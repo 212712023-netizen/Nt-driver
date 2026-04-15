@@ -57,7 +57,13 @@ const authSelectiveLimiter = (req, res, next) => {
   return authLimiter(req, res, next);
 };
 
-app.use(express.static(path.join(__dirname, 'public')));
+// Servir arquivos estáticos do React build (dist) em produção
+const reactBuildPath = path.join(__dirname, 'dist');
+if (IS_PRODUCTION && require('fs').existsSync(reactBuildPath)) {
+  app.use(express.static(reactBuildPath));
+} else {
+  app.use(express.static(path.join(__dirname, 'public')));
+}
 app.use(express.json());
 
 const sessionConfig = {
@@ -96,8 +102,14 @@ app.get('/healthz', (req, res) => {
   res.status(200).json({ ok: true, service: 'nt-driver' });
 });
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+
+// Fallback para SPA: qualquer rota que não seja API retorna index.html do build
+app.get(/^\/(?!api).*/, (req, res) => {
+  if (IS_PRODUCTION && require('fs').existsSync(path.join(reactBuildPath, 'index.html'))) {
+    res.sendFile(path.join(reactBuildPath, 'index.html'));
+  } else {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  }
 });
 
 const startServer = async () => {

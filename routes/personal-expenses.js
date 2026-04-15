@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const express = require('express');
 const db = require('../models/db');
 const { requireAuth } = require('../middleware/auth');
@@ -18,12 +19,14 @@ const normalizeItem = (item = {}) => {
   const dueRaw = Number(item.due_day);
   const fallbackDay = Number(date.slice(8, 10)) || 1;
   const dueDay = Number.isFinite(dueRaw) && dueRaw >= 1 && dueRaw <= 31 ? dueRaw : fallbackDay;
+  const entryKey = String(item.entry_key || item.entryKey || item.id || '').trim() || crypto.randomUUID();
 
   let isFixed = item.is_fixed;
   if (isFixed === null || isFixed === undefined || isFixed === '') isFixed = null;
   else isFixed = Boolean(isFixed);
 
   return {
+    entry_key: entryKey,
     description: String(item.description || '').trim(),
     amount: Number(item.amount) || 0,
     type: item.type === 'entrada' ? 'entrada' : 'saida',
@@ -50,7 +53,16 @@ router.get('/', async (req, res) => {
 router.post('/replace', async (req, res) => {
   const userId = req.session.userId;
   const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
-  const items = rawItems.map(normalizeItem).filter((item) => item.amount > 0);
+  const itemsMap = new Map();
+
+  rawItems
+    .map(normalizeItem)
+    .filter((item) => item.amount > 0)
+    .forEach((item) => {
+      itemsMap.set(item.entry_key, item);
+    });
+
+  const items = Array.from(itemsMap.values());
 
   try {
     const rows = await db.withTransaction(async (client) => {
@@ -59,11 +71,12 @@ router.post('/replace', async (req, res) => {
       for (const item of items) {
         await client.query(
           `INSERT INTO personal_expenses (
-            user_id, description, amount, type, category, account, status,
+            user_id, entry_key, description, amount, type, category, account, status,
             date, due_day, installments, is_fixed, installments_start_month
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
           [
             userId,
+            item.entry_key,
             item.description,
             item.amount,
             item.type,

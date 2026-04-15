@@ -1,0 +1,22 @@
+{
+  "name": "DailyGoal",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "title": "Data"
+    },
+    "meta_override": {
+      "type": "number",
+      "title": "Meta do Dia"
+    },
+    "folga": {
+      "type": "boolean",
+      "title": "Folga"
+    }
+  },
+  "required": [
+    "date"
+  ]
+}

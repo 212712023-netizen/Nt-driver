@@ -1,0 +1,22 @@
+{
+  "name": "DriverNote",
+  "type": "object",
+  "properties": {
+    "content": {
+      "type": "string",
+      "title": "Conteúdo"
+    },
+    "month": {
+      "type": "number",
+      "title": "Mês"
+    },
+    "year": {
+      "type": "number",
+      "title": "Ano"
+    }
+  },
+  "required": [
+    "month",
+    "year"
+  ]
+}

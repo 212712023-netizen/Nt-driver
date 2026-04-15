@@ -1,59 +1,5 @@
-const pages = document.querySelectorAll('.page');
-const navButtons = document.querySelectorAll('.nav-btn');
-const recordDate = document.getElementById('record-date');
-const incomeUberValue = document.getElementById('income-value-uber');
-const income99Value = document.getElementById('income-value-99');
-const expenseFuelValue = document.getElementById('expense-fuel-value');
-const expenseFoodValue = document.getElementById('expense-food-value');
-const expenseOilValue = document.getElementById('expense-oil-value');
-const expenseWashValue = document.getElementById('expense-wash-value');
-const expenseOtherValue = document.getElementById('expense-other-value');
-const kmInput = document.getElementById('km-value');
-const hoursInput = document.getElementById('hours-worked');
-const saveRecordButton = document.getElementById('save-record');
-const saveGoalButton = document.getElementById('save-goal');
-const recordsTable = document.getElementById('records-table');
-const appToastEl = document.getElementById('app-toast');
-const appShellEl = document.getElementById('app-shell');
-const authGateEl = document.getElementById('auth-gate');
-const authTabs = document.querySelectorAll('.auth-tab');
-const authLoginForm = document.getElementById('auth-login-form');
-const authRegisterForm = document.getElementById('auth-register-form');
-const authRegisterProfileSelect = document.getElementById('auth-register-profile');
-const authForgotForm = document.getElementById('auth-forgot-form');
-const authResetForm = document.getElementById('auth-reset-form');
-const openForgotFormButton = document.getElementById('open-forgot-form-btn');
-const backToLoginButton = document.getElementById('back-to-login-btn');
-const openResetManualButton = document.getElementById('open-reset-manual-btn');
-const authMessageEl = document.getElementById('auth-message');
-const currentUserNameEl = document.getElementById('current-user-name');
-const logoutButton = document.getElementById('logout-btn');
-const adminUsersNavButton = document.getElementById('admin-users-nav-btn');
-const adminNotesNavButton = document.getElementById('admin-notes-nav-btn');
-const adminCreateUserForm = document.getElementById('admin-create-user-form');
-const adminCreateNameInput = document.getElementById('admin-create-name');
-const adminCreateEmailInput = document.getElementById('admin-create-email');
-const adminCreatePasswordInput = document.getElementById('admin-create-password');
-const adminCreateIsAdminInput = document.getElementById('admin-create-is-admin');
-const adminUsersListEl = document.getElementById('admin-users-list');
-const adminUsersMessageEl = document.getElementById('admin-users-message');
-const adminNotesEditorEl = document.getElementById('admin-notes-editor');
-const adminNotesMessageEl = document.getElementById('admin-notes-message');
-const adminNotesSaveButton = document.getElementById('admin-notes-save-btn');
-const adminNotesInsertTableButton = document.getElementById('admin-notes-insert-table-btn');
-const adminNotesInsertMonthTemplateButton = document.getElementById('admin-notes-insert-month-template-btn');
-const adminNotesToolbarButtons = document.querySelectorAll('.admin-notes-toolbar-btn[data-note-cmd]');
-const openPasswordModalButton = document.getElementById('open-password-modal-btn');
-const passwordModalEl = document.getElementById('password-modal');
-const closePasswordModalButton = document.getElementById('close-password-modal-btn');
-const passwordForm = document.getElementById('password-form');
-const passwordMessageEl = document.getElementById('password-message');
-const currentPasswordInput = document.getElementById('current-password-input');
-const newPasswordInput = document.getElementById('new-password-input');
-const confirmPasswordInput = document.getElementById('confirm-password-input');
-
-let dashboardMonthlyIncome = 0;
-let editingRecordId = null;
+// Código antigo desabilitado para evitar conflito com React SPA
+// (Se necessário, migrar funcionalidades para componentes React)
 let isSavingRecord = false;
 let hasBootstrappedApp = false;
 let currentSessionUser = null;
@@ -188,6 +134,7 @@ const PERSONAL_CATEGORY_SUGGESTIONS_KEY_PREFIX = 'nt-driver-personal-category-su
 const PERSONAL_CATEGORY_SUGGESTIONS_LIMIT = 30;
 
 let personalExpensesCache = [];
+let personalEditingKey = null;
 
 const PERSONAL_CATEGORY_LABELS = {
   alimentacao: 'Alimentação',
@@ -212,6 +159,18 @@ const formatCurrency = (value) =>
     style: 'currency',
     currency: 'BRL'
   }).format(value);
+
+const createPersonalExpenseKey = () => {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return `expense-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
+const getPersonalExpenseIdentity = (item = {}) => {
+  const entryKey = String(item.entry_key || item.entryKey || '').trim();
+  if (entryKey) return entryKey;
+  const id = String(item.id || '').trim();
+  return id ? `legacy-${id}` : '';
+};
 
 const parseCurrencyInput = (value) => {
   if (value === null || value === undefined) return 0;
@@ -396,11 +355,26 @@ const updateRegisterAvailabilityUi = () => {
 const openAuthGate = () => {
   authGateEl?.classList.remove('hidden');
   appShellEl?.classList.add('app-shell-hidden');
+  closeSidebarMobile();
 };
 
 const openAppShell = () => {
   authGateEl?.classList.add('hidden');
   appShellEl?.classList.remove('app-shell-hidden');
+};
+
+const closeSidebarMobile = () => {
+  appShellEl?.classList.remove('sidebar-open');
+  sidebarOverlayEl?.classList.remove('open');
+};
+
+const openSidebarMobile = () => {
+  appShellEl?.classList.add('sidebar-open');
+  sidebarOverlayEl?.classList.add('open');
+};
+
+const toggleSidebarCollapsed = () => {
+  appShellEl?.classList.toggle('sidebar-collapsed');
 };
 
 const getSessionProfileType = () => String(currentSessionUser?.profileType || 'driver');
@@ -1435,7 +1409,6 @@ const populatePersonalMonthFilter = () => {
   personalFilterMonth.value = getCurrentYearMonth();
 };
 
-let personalEditingId = null;
 let personalSheetEditingRowId = null;
 
 const setActivePersonalTab = (tabId) => {
@@ -1587,9 +1560,9 @@ const renderPersonalExpenses = () => {
           <td>${formatPersonalCategory(item.category)}</td>
           <td class="personal-status ${item.status === 'pago' ? 'paid' : 'pending'}">${item.status === 'pago' ? 'Pago' : 'Pendente'}</td>
           <td>
-            <button type="button" class="personal-toggle-status" data-id="${item.id ?? ''}" title="${item.status === 'pago' ? 'Marcar como pendente' : 'Marcar como pago'}" aria-label="${item.status === 'pago' ? 'Marcar como pendente' : 'Marcar como pago'}">${item.status === 'pago' ? 'Pendente' : 'Pago'}</button>
-            <button type="button" class="personal-edit" data-id="${item.id ?? ''}" title="Editar" aria-label="Editar">✏️</button>
-            <button type="button" class="personal-delete" data-id="${item.id ?? ''}" title="Excluir" aria-label="Excluir">🗑️</button>
+            <button type="button" class="personal-toggle-status" data-entry-key="${getPersonalExpenseIdentity(item)}" title="${item.status === 'pago' ? 'Marcar como pendente' : 'Marcar como pago'}" aria-label="${item.status === 'pago' ? 'Marcar como pendente' : 'Marcar como pago'}">${item.status === 'pago' ? 'Pendente' : 'Pago'}</button>
+            <button type="button" class="personal-edit" data-entry-key="${getPersonalExpenseIdentity(item)}" title="Editar" aria-label="Editar">✏️</button>
+            <button type="button" class="personal-delete" data-entry-key="${getPersonalExpenseIdentity(item)}" title="Excluir" aria-label="Excluir">🗑️</button>
           </td>
         </tr>
       `
@@ -1608,9 +1581,9 @@ const renderPersonalExpenses = () => {
 
   personalExpensesList.querySelectorAll('.personal-delete').forEach((button) => {
     button.addEventListener('click', async () => {
-      const id = button.dataset.id;
+      const entryKey = button.dataset.entryKey || '';
       const currentItems = getPersonalExpenses();
-      const nextItems = currentItems.filter((item) => String(item.id || '') !== id);
+      const nextItems = currentItems.filter((item) => getPersonalExpenseIdentity(item) !== entryKey);
       try {
         await savePersonalExpenses(nextItems);
         renderPersonalExpenses();
@@ -1622,10 +1595,10 @@ const renderPersonalExpenses = () => {
 
   personalExpensesList.querySelectorAll('.personal-toggle-status').forEach((button) => {
     button.addEventListener('click', async () => {
-      const id = button.dataset.id;
+      const entryKey = button.dataset.entryKey || '';
       const currentItems = getPersonalExpenses();
       const nextItems = currentItems.map((item) => {
-        if (String(item.id || '') !== id) return item;
+        if (getPersonalExpenseIdentity(item) !== entryKey) return item;
         return {
           ...item,
           status: item.status === 'pago' ? 'pendente' : 'pago'
@@ -1642,11 +1615,11 @@ const renderPersonalExpenses = () => {
 
   personalExpensesList.querySelectorAll('.personal-edit').forEach((button) => {
     button.addEventListener('click', () => {
-      const id = button.dataset.id;
+      const entryKey = button.dataset.entryKey || '';
       const currentItems = getPersonalExpenses();
-      const item = currentItems.find((entry) => String(entry.id) === id);
+      const item = currentItems.find((entry) => getPersonalExpenseIdentity(entry) === entryKey);
       if (!item) return;
-      personalEditingId = item.id;
+      personalEditingKey = getPersonalExpenseIdentity(item);
       if (personalEntryDescriptionInput) personalEntryDescriptionInput.value = item.description || '';
       if (personalEntryAmountInput) personalEntryAmountInput.value = item.amount || '';
       if (personalEntryDueDayInput) personalEntryDueDayInput.value = item.due_day || '';
@@ -1748,8 +1721,12 @@ const addPersonalExpense = async (options = {}) => {
   rememberPersonalCategorySuggestion(category);
 
   const items = getPersonalExpenses();
+  const editingItem = personalEditingKey
+    ? items.find((item) => getPersonalExpenseIdentity(item) === personalEditingKey)
+    : null;
   const updatedItem = {
-    id: personalEditingId || Date.now(),
+    id: editingItem?.id,
+    entry_key: editingItem?.entry_key || personalEditingKey || createPersonalExpenseKey(),
     description,
     amount,
     type,
@@ -1763,15 +1740,15 @@ const addPersonalExpense = async (options = {}) => {
     installments_start_month: date.slice(0, 7)
   };
 
-  if (personalEditingId) {
-    const nextItems = items.map((item) => (String(item.id) === String(personalEditingId) ? updatedItem : item));
+  if (personalEditingKey) {
+    const nextItems = items.map((item) => (getPersonalExpenseIdentity(item) === personalEditingKey ? updatedItem : item));
     try {
       await savePersonalExpenses(nextItems);
     } catch (error) {
       showAppToast(error.message || 'Nao foi possivel salvar a despesa.', 'error');
       return;
     }
-    personalEditingId = null;
+    personalEditingKey = null;
     if (addPersonalExpenseButton) addPersonalExpenseButton.textContent = 'Adicionar';
     if (personalTableAddButton) personalTableAddButton.textContent = 'Adicionar';
   } else {
@@ -1854,8 +1831,14 @@ navButtons.forEach((button) => {
   button.addEventListener('click', (event) => {
     event.preventDefault();
     setActivePage(button.dataset.page);
+    closeSidebarMobile();
   });
 });
+
+sidebarMobileOpenButton?.addEventListener('click', openSidebarMobile);
+sidebarMobileCloseButton?.addEventListener('click', closeSidebarMobile);
+sidebarOverlayEl?.addEventListener('click', closeSidebarMobile);
+sidebarCollapseButton?.addEventListener('click', toggleSidebarCollapsed);
 
 personalSheetYearSelect?.addEventListener('change', async () => {
   const selectedYear = Number(personalSheetYearSelect.value || new Date().getFullYear());
