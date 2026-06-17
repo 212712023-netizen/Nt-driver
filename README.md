@@ -27,35 +27,75 @@ No seu caso: `C:\Users\natha\Nt driver`
 
 ## Checklist rapido antes de rodar
 
-1. Preencher `.env` na raiz
+1. Para localhost, use `.env.local` e rode `npm run start:local`
 2. Rodar `npm install`
-3. Rodar `node server.js`
+3. Abrir `http://localhost:3000`
 4. Se der erro de porta, liberar porta 3000 e iniciar novamente
+
+## Rodar em localhost
+
+O projeto tem um arquivo `.env.local` para voltar ao ambiente local sem depender do Fly.io.
+Ele usa SQLite em `database/ntdriver.db` e define `APP_BASE_URL=http://localhost:3000`.
+
+```bash
+npm run start:local
+```
+
+Depois acesse:
+
+```text
+http://localhost:3000
+```
 
 ## Variaveis essenciais do `.env`
 
 - `SESSION_SECRET`: chave longa e aleatoria
-- `DATABASE_URL`: URL do PostgreSQL/Supabase
+- `DB_CLIENT`: `sqlite` para banco no mesmo app ou `postgres` para banco externo
+- `SQLITE_FILE`: caminho do arquivo SQLite (ex.: `/data/ntdriver.db` na Fly)
+- `DATABASE_URL`: URL do PostgreSQL/Supabase quando `DB_CLIENT=postgres`
 - `APP_BASE_URL`: URL publica do app (ou localhost em desenvolvimento)
 - `SESSION_TABLE_NAME`: opcional, nome da tabela de sessao no PostgreSQL (padrao: `user_sessions`)
 - `PUBLIC_REGISTER_ENABLED`: `true` para liberar cadastro na tela de login mesmo com usuarios existentes
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`: envio de email para recuperação de senha e confirmação de cadastro
+- `EMAIL_VERIFICATION_TOKEN_MINUTES`: validade do link de confirmação de email
 
 ## Deploy basico (backend + frontend juntos)
 
 1. Defina no `.env` de producao:
 	- `NODE_ENV=production`
 	- `APP_BASE_URL=https://SEU-DOMINIO-PUBLICO`
-	- `DATABASE_URL` apontando para Supabase
+	- para banco no mesmo app: `DB_CLIENT=sqlite` e `SQLITE_FILE=/data/ntdriver.db`
+	- para PostgreSQL externo: `DB_CLIENT=postgres` e `DATABASE_URL` apontando para Supabase
 	- `SESSION_SECRET` forte
 2. Instale dependencias: `npm install`
 3. Se estiver migrando historico do SQLite: `npm run migrate:sqlite-to-postgres`
 4. Inicie o app: `npm start`
 5. Abra `https://SEU-DOMINIO-PUBLICO` e valide login e dados
 
+## Cadastro com verificação de email
+
+- Novos cadastros públicos precisam confirmar o email antes do primeiro login.
+- O sistema envia um link de verificação usando o SMTP configurado.
+- Senhas novas precisam ter no mínimo 8 caracteres com letra maiúscula, minúscula, número e caractere especial.
+- Usuários antigos continuam funcionando; a exigência vale para novas contas criadas no fluxo público.
+
 ## Sessao em producao
 
-- Em `NODE_ENV=production`, o app usa `connect-pg-simple` para salvar sessao no PostgreSQL.
-- Em desenvolvimento local, o app permanece com MemoryStore para simplicidade.
+- Em `NODE_ENV=production` com `DB_CLIENT=postgres`, o app usa `connect-pg-simple` para salvar sessao no PostgreSQL.
+- Em `DB_CLIENT=sqlite`, a sessao fica no store padrao do processo; reinicios e deploys encerram sessoes ativas.
+
+## Fly.io com tudo no mesmo app
+
+1. Crie um volume persistente:
+	- `fly volumes create data --region gru --size 1 -a nt-driver`
+2. Configure os secrets:
+	- `DB_CLIENT=sqlite`
+	- `SQLITE_FILE=/data/ntdriver.db`
+	- `NODE_ENV=production`
+	- `APP_BASE_URL=https://nt-driver.fly.dev`
+	- `SESSION_SECRET` forte
+3. Publique:
+	- `fly deploy -a nt-driver`
 
 ## Checklist final de publicacao
 

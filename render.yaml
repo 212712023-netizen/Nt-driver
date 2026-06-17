@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: nt-driver
+    env: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 24.12.0
+      - key: DB_CLIENT
+        value: postgres
+      - key: SESSION_TABLE_NAME
+        value: user_sessions
+      - key: PUBLIC_REGISTER_ENABLED
+        value: "true"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_BASE_URL
+        sync: false

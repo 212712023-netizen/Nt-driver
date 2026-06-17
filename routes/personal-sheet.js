@@ -45,11 +45,11 @@ const requirePersonalProfile = async (req, res, next) => {
   try {
     const profileType = await resolveProfileType(req);
     if (profileType !== 'personal') {
-      return res.status(403).json({ error: 'Modulo disponivel apenas para perfil pessoal.' });
+        return res.status(403).json({ error: 'Módulo disponível apenas para perfil pessoal.' });
     }
     return next();
   } catch (error) {
-    return res.status(500).json({ error: 'Falha ao validar perfil do usuario.' });
+    return res.status(500).json({ error: 'Falha ao validar perfil do usuário.' });
   }
 };
 
@@ -132,7 +132,7 @@ router.post('/rows', async (req, res) => {
   const name = normalizeName(req.body?.name);
 
   if (!kind || !name) {
-    return res.status(400).json({ error: 'Informe tipo valido (income/expense) e nome da linha.' });
+    return res.status(400).json({ error: 'Informe tipo válido (income/expense) e nome da linha.' });
   }
 
   try {
@@ -168,7 +168,7 @@ router.patch('/rows/:id', async (req, res) => {
   const name = normalizeName(req.body?.name);
 
   if (!Number.isInteger(rowId) || rowId <= 0 || !name) {
-    return res.status(400).json({ error: 'Dados invalidos para atualizar linha.' });
+    return res.status(400).json({ error: 'Dados inválidos para atualizar linha.' });
   }
 
   try {
@@ -181,7 +181,7 @@ router.patch('/rows/:id', async (req, res) => {
     );
 
     if (!row) {
-      return res.status(404).json({ error: 'Linha nao encontrada.' });
+      return res.status(404).json({ error: 'Linha não encontrada.' });
     }
 
     return res.json({
@@ -202,7 +202,7 @@ router.delete('/rows/:id', async (req, res) => {
   const rowId = Number(req.params.id);
 
   if (!Number.isInteger(rowId) || rowId <= 0) {
-    return res.status(400).json({ error: 'Linha invalida.' });
+    return res.status(400).json({ error: 'Linha inválida.' });
   }
 
   try {
@@ -212,7 +212,7 @@ router.delete('/rows/:id', async (req, res) => {
     );
 
     if ((result.rowCount || 0) <= 0) {
-      return res.status(404).json({ error: 'Linha nao encontrada.' });
+      return res.status(404).json({ error: 'Linha não encontrada.' });
     }
 
     return res.json({ ok: true });
@@ -227,15 +227,15 @@ router.put('/values', async (req, res) => {
   const updates = Array.isArray(req.body?.updates) ? req.body.updates : [];
 
   if (!year) {
-    return res.status(400).json({ error: 'Ano invalido.' });
+    return res.status(400).json({ error: 'Ano inválido.' });
   }
 
   if (!updates.length) {
-    return res.status(400).json({ error: 'Nenhuma atualizacao informada.' });
+    return res.status(400).json({ error: 'Nenhuma atualização informada.' });
   }
 
   if (updates.length > 1000) {
-    return res.status(400).json({ error: 'Limite de atualizacoes excedido.' });
+    return res.status(400).json({ error: 'Limite de atualizações excedido.' });
   }
 
   const normalizedUpdates = [];
@@ -244,7 +244,7 @@ router.put('/values', async (req, res) => {
     const month = parseMonth(item?.month);
 
     if (!Number.isInteger(rowId) || rowId <= 0 || !month) {
-      return res.status(400).json({ error: 'Atualizacao invalida: rowId ou month.' });
+        return res.status(400).json({ error: 'Atualização inválida: rowId ou month.' });
     }
 
     const rawAmount = item?.amount;
@@ -253,11 +253,11 @@ router.put('/values', async (req, res) => {
     const amount = shouldDelete ? 0 : Number(rawAmount);
 
     if (!shouldDelete && !Number.isFinite(amount)) {
-      return res.status(400).json({ error: 'Atualizacao invalida: amount deve ser numerico.' });
+        return res.status(400).json({ error: 'Atualização inválida: amount deve ser numérico.' });
     }
 
     if (item?.day !== null && item?.day !== undefined && item?.day !== '' && day === null) {
-      return res.status(400).json({ error: 'Atualizacao invalida: dia deve estar entre 1 e 31.' });
+        return res.status(400).json({ error: 'Atualização inválida: dia deve estar entre 1 e 31.' });
     }
 
     normalizedUpdates.push({ rowId, month, shouldDelete, amount, day });
@@ -271,7 +271,7 @@ router.put('/values', async (req, res) => {
     );
 
     if ((ownerRows || []).length !== rowIds.length) {
-      return res.status(400).json({ error: 'Uma ou mais linhas nao pertencem ao usuario.' });
+      return res.status(400).json({ error: 'Uma ou mais linhas não pertencem ao usuário.' });
     }
 
     await db.withTransaction(async (client) => {
@@ -288,8 +288,11 @@ router.put('/values', async (req, res) => {
         await client.query(
           `INSERT INTO personal_sheet_values (user_id, row_id, year, month, amount, day_of_month)
            VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (user_id, row_id, year, month)
-           DO UPDATE SET amount = EXCLUDED.amount, day_of_month = EXCLUDED.day_of_month`,
+            ON CONFLICT (user_id, row_id, year, month)
+           DO UPDATE SET
+             amount = EXCLUDED.amount,
+             day_of_month = EXCLUDED.day_of_month,
+             updated_at = NOW()`,
           [userId, item.rowId, year, item.month, item.amount, item.day]
         );
       }

@@ -14,12 +14,40 @@ const sqlSelectByUser = `
   ORDER BY due_day ASC, date ASC, id DESC
 `;
 
+const normalizeStatusMonths = (value, date, status) => {
+  let parsed = value;
+
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch (error) {
+      parsed = {};
+    }
+  }
+
+  const normalized = Object.entries(parsed && typeof parsed === 'object' ? parsed : {}).reduce((accumulator, [monthKey, monthStatus]) => {
+    const normalizedMonth = String(monthKey || '').trim();
+    if (!/^\d{4}-\d{2}$/.test(normalizedMonth)) return accumulator;
+    if (monthStatus === 'pago') accumulator[normalizedMonth] = 'pago';
+    return accumulator;
+  }, {});
+
+  const baseMonth = String(date || '').slice(0, 7);
+  if (status === 'pago' && /^\d{4}-\d{2}$/.test(baseMonth) && !normalized[baseMonth]) {
+    normalized[baseMonth] = 'pago';
+  }
+
+  return normalized;
+};
+
 const normalizeItem = (item = {}) => {
   const date = String(item.date || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
   const dueRaw = Number(item.due_day);
   const fallbackDay = Number(date.slice(8, 10)) || 1;
   const dueDay = Number.isFinite(dueRaw) && dueRaw >= 1 && dueRaw <= 31 ? dueRaw : fallbackDay;
   const entryKey = String(item.entry_key || item.entryKey || item.id || '').trim() || crypto.randomUUID();
+  const statusMonths = normalizeStatusMonths(item.status_months ?? item.statusMonths, date, item.status);
+  const baseMonth = date.slice(0, 7);
 
   let isFixed = item.is_fixed;
   if (isFixed === null || isFixed === undefined || isFixed === '') isFixed = null;
@@ -32,7 +60,8 @@ const normalizeItem = (item = {}) => {
     type: item.type === 'entrada' ? 'entrada' : 'saida',
     category: String(item.category || 'outros'),
     account: String(item.account || 'outros'),
-    status: item.status === 'pago' ? 'pago' : 'pendente',
+    status: statusMonths[baseMonth] === 'pago' ? 'pago' : 'pendente',
+    status_months: Object.keys(statusMonths).length ? JSON.stringify(statusMonths) : null,
     date,
     due_day: dueDay,
     installments: String(item.installments || '').trim(),
@@ -71,9 +100,9 @@ router.post('/replace', async (req, res) => {
       for (const item of items) {
         await client.query(
           `INSERT INTO personal_expenses (
-            user_id, entry_key, description, amount, type, category, account, status,
+            user_id, entry_key, description, amount, type, category, account, status, status_months,
             date, due_day, installments, is_fixed, installments_start_month
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
           [
             userId,
             item.entry_key,
@@ -83,6 +112,7 @@ router.post('/replace', async (req, res) => {
             item.category,
             item.account,
             item.status,
+            item.status_months,
             item.date,
             item.due_day,
             item.installments,

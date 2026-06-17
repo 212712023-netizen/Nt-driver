@@ -1,0 +1,36 @@
+Instruções para rodar os comandos no seu computador (cópia pronta)
+
+Antes de começar: confirme que está autenticado no flyctl:
+  flyctl auth whoami
+
+OPÇÃO 1 — PowerShell (Windows) — RÁPIDO (não cria usuário remoto, apenas define SECRET e reinicia):
+
+1) Abra PowerShell e vá para a pasta do projeto (opcional):
+   cd "C:\Users\souzi\Downloads\Nt driver-20260414T224639Z-3-001\Nt driver\scripts"
+
+2) Se necessário, desbloqueie o script:
+   Unblock-File .\run_local_setup.ps1
+
+3) Cole e execute estas linhas (cole tudo junto):
+
+$pw=([guid]::NewGuid().ToString('N')+[guid]::NewGuid().ToString('N')).Substring(0,20)
+Write-Output $pw
+flyctl secrets set "DATABASE_URL=postgres://appuser:$pw@e827943f0d3738.vm.nt-driver-db.internal:5433/appdb?sslmode=disable" -a nt-driver
+flyctl machines restart -a nt-driver
+flyctl logs -a nt-driver --no-tail
+
+OPÇÃO 2 — Bash / WSL / Git-Bash (RECOMENDADO para criar usuário+DB remotamente):
+
+pw=$(openssl rand -base64 15 | tr -d '=+/')
+sql="CREATE USER appuser WITH PASSWORD '$pw'; CREATE DATABASE appdb OWNER appuser;"
+flyctl machine exec e827943f0d3738 -a nt-driver-db -- bash -lc "psql -U postgres -c \"$sql\""
+flyctl secrets set DATABASE_URL="postgres://appuser:${pw}@e827943f0d3738.vm.nt-driver-db.internal:5433/appdb?sslmode=disable" -a nt-driver
+flyctl machines restart -a nt-driver
+flyctl logs -a nt-driver --no-tail
+
+Notas:
+- Os comandos usam "sslmode=disable" porque os logs mostraram "The server does not support SSL connections". Se quiser, tente depois com sslmode=verify-full.
+- Depois de rodar, cole aqui as últimas linhas do output de:
+  Get-Content .\nt-driver.post-update.logs.txt -Tail 50
+
+Se quiser, posso gerar um .ps1 que execute tudo automaticamente (mas precisa que flyctl funcione localmente).

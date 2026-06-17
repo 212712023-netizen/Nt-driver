@@ -1,0 +1,36 @@
+Instruções rápidas para corrigir a conexão ao Postgres (copiar/colar)
+
+IMPORTANTE: confirme que o flyctl está autenticado:
+  flyctl auth whoami
+
+RECOMENDADO: use WSL / Git-Bash (menos problemas de aspas)
+
+OPÇÃO A — WSL / Git-Bash (recomendado: cria usuário e DB remotamente)
+1) Gere senha e crie usuário/DB:
+
+pw=$(openssl rand -base64 15 | tr -d '=+/')
+sql="CREATE USER appuser WITH PASSWORD '$pw'; CREATE DATABASE appdb OWNER appuser;"
+flyctl machine exec e827943f0d3738 -a nt-driver-db -- bash -lc "psql -U postgres -c \"$sql\""
+
+2) Teste a conexão (opcional):
+flyctl machine exec e827943f0d3738 -a nt-driver-db -- bash -lc "PGPASSWORD=$pw psql -U appuser -h localhost -p 5433 -c '\\conninfo'"
+
+3) Atualize secret e reinicie app:
+flyctl secrets set DATABASE_URL="postgres://appuser:${pw}@e827943f0d3738.vm.nt-driver-db.internal:5433/appdb?sslmode=disable" -a nt-driver
+flyctl machines restart -a nt-driver
+flyctl logs -a nt-driver --no-tail
+
+OPÇÃO B — PowerShell (Windows)
+1) Gere senha e crie user/DB (use WSL for criação remota se tiver problemas):
+$pw=([guid]::NewGuid().ToString('N')+[guid]::NewGuid().ToString('N')).Substring(0,20)
+
+2) Defina secret e reinicie app (cole tudo junto):
+flyctl secrets set "DATABASE_URL=postgres://appuser:$pw@e827943f0d3738.vm.nt-driver-db.internal:5433/appdb?sslmode=disable" -a nt-driver
+flyctl machines restart -a nt-driver
+flyctl logs -a nt-driver --no-tail
+
+OBSERVAÇÕES
+- Use sslmode=disable porque os logs mostraram "The server does not support SSL connections". Se resolver o TLS no servidor, mude para sslmode=verify-full.
+- Depois de rodar, cole aqui as últimas 30–50 linhas do flyctl logs (ou do arquivo nt-driver.post-update.logs.txt) e eu analiso.
+
+Se quiser, crio um .sh ou .ps1 executável. Deseja isto? (responda: .sh ou .ps1 ou NÃO)

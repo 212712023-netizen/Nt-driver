@@ -37,7 +37,7 @@ router.delete('/by-date/:date', async (req, res) => {
   const rawDate = req.params.date || '';
   const date = decodeURIComponent(rawDate).trim();
   if (!date) {
-    return res.status(400).json({ error: 'Data invalida.' });
+    return res.status(400).json({ error: 'Data inválida.' });
   }
 
   try {

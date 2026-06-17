@@ -8,8 +8,9 @@ const { requireAuth, requireAdmin } = require('../middleware/auth');
 const router = express.Router();
 
 const RESET_TOKEN_MINUTES = 30;
+const EMAIL_VERIFICATION_TOKEN_MINUTES = Number(process.env.EMAIL_VERIFICATION_TOKEN_MINUTES || 60 * 24);
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3000';
-const PUBLIC_REGISTER_ENABLED = String(process.env.PUBLIC_REGISTER_ENABLED || 'false') === 'true';
+const PUBLIC_REGISTER_ENABLED = String(process.env.PUBLIC_REGISTER_ENABLED || 'true') === 'true';
 const SMTP_HOST = process.env.SMTP_HOST || '';
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
 const SMTP_SECURE = String(process.env.SMTP_SECURE || 'false') === 'true';
@@ -17,6 +18,7 @@ const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
 const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER || 'no-reply@ntdriver.local';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+const PASSWORD_MIN_LENGTH = 8;
 
 const hasSmtpConfig = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS);
 const mailTransport = hasSmtpConfig
@@ -35,11 +37,41 @@ const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 const isValidEmail = (email) => EMAIL_REGEX.test(String(email || ''));
 const normalizeProfileType = (value) => {
   const profile = String(value || '').trim().toLowerCase();
-  if (profile === 'driver' || profile === 'personal') return profile;
+  if (profile === 'driver' || profile === 'motorista') return 'driver';
+  if (profile === 'personal' || profile === 'pessoal') return 'personal';
   return '';
 };
+const serializeProfileType = (value) => (normalizeProfileType(value) === 'personal' ? 'pessoal' : 'driver');
 
-const hashResetToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+
+const getPasswordValidationErrors = (password) => {
+  const rawPassword = String(password || '');
+  const errors = [];
+
+  if (rawPassword.length < PASSWORD_MIN_LENGTH) {
+    errors.push(`A senha deve ter pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`);
+  }
+  if (!/[a-z]/.test(rawPassword)) {
+    errors.push('A senha deve ter ao menos uma letra minúscula.');
+  }
+  if (!/[A-Z]/.test(rawPassword)) {
+    errors.push('A senha deve ter ao menos uma letra maiúscula.');
+  }
+  if (!/\d/.test(rawPassword)) {
+    errors.push('A senha deve ter ao menos um número.');
+  }
+  if (!/[^A-Za-z0-9]/.test(rawPassword)) {
+    errors.push('A senha deve ter ao menos um caractere especial.');
+  }
+
+  return errors;
+};
+
+const getPasswordValidationMessage = (password) => {
+  const errors = getPasswordValidationErrors(password);
+  return errors.length ? errors[0] : '';
+};
 
 const getUsersCount = async () => {
   const row = await db.get('SELECT COUNT(*)::int AS count FROM users');
@@ -47,17 +79,30 @@ const getUsersCount = async () => {
 };
 
 const getUserById = async (id) => db.get(
-  'SELECT id, name, email, is_admin, profile_type FROM users WHERE id = $1',
+  'SELECT id, name, email, is_admin, profile_type, last_login_at, email_verified_at, email_verification_required FROM users WHERE id = $1',
   [id]
 );
+
+const updateLastLoginAt = async (userId) => {
+  await db.query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [userId]);
+};
 
 const assignSessionUser = (req, user) => {
   req.session.userId = user.id;
   req.session.userName = user.name;
   req.session.userEmail = user.email;
   req.session.isAdmin = Boolean(user.is_admin);
-  req.session.profileType = String(user.profile_type || 'driver');
+  req.session.profileType = serializeProfileType(user.profile_type);
 };
+
+const serializeUser = (user) => ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  isAdmin: Boolean(user.is_admin),
+  profileType: serializeProfileType(user.profile_type),
+  emailVerified: Boolean(user.email_verified_at) || !Boolean(user.email_verification_required)
+});
 
 const sendResetEmail = async (email, link) => {
   if (!mailTransport) {
@@ -68,10 +113,56 @@ const sendResetEmail = async (email, link) => {
   await mailTransport.sendMail({
     from: SMTP_FROM,
     to: email,
-    subject: 'Recuperacao de senha - NT Driver',
-    text: `Voce solicitou recuperacao de senha. Use este link: ${link}`,
-    html: `<p>Voce solicitou recuperacao de senha.</p><p><a href=\"${link}\">Clique para redefinir sua senha</a></p><p>Se nao foi voce, ignore este email.</p>`
+    subject: 'Recuperação de senha - NT Driver',
+    text: `Você solicitou recuperação de senha. Use este link: ${link}`,
+    html: `<p>Você solicitou recuperação de senha.</p><p><a href=\"${link}\">Clique para redefinir sua senha</a></p><p>Se não foi você, ignore este email.</p>`
   });
+};
+
+const sendVerificationEmail = async (email, link) => {
+  if (!mailTransport) {
+    console.log(`[auth] Link de verificação para ${email}: ${link}`);
+    return;
+  }
+
+  await mailTransport.sendMail({
+    from: SMTP_FROM,
+    to: email,
+    subject: 'Confirme seu email - NT Driver',
+    text: `Confirme seu email para liberar o acesso ao NT Driver: ${link}`,
+    html: `<p>Confirme seu email para liberar o acesso ao NT Driver.</p><p><a href="${link}">Clique para confirmar seu email</a></p><p>Se não foi você, ignore este email.</p>`
+  });
+};
+
+const buildVerificationLink = (email, token) => `${APP_BASE_URL}/api/auth/verify-email?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
+
+const buildFrontendAuthRedirectUrl = (messageCode, email = '') => {
+  const params = new URLSearchParams();
+  params.set('authMode', 'login');
+  params.set('authMessage', messageCode);
+  if (email) params.set('authEmail', email);
+  return `${APP_BASE_URL}/driver?${params.toString()}`;
+};
+
+const createEmailVerification = async (client, userId, email) => {
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashToken(rawToken);
+  const expiresAt = new Date(Date.now() + (EMAIL_VERIFICATION_TOKEN_MINUTES * 60 * 1000));
+
+  await client.query(
+    'DELETE FROM email_verification_tokens WHERE user_id = $1 AND used_at IS NULL',
+    [userId]
+  );
+  await client.query(
+    'INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
+    [userId, tokenHash, expiresAt]
+  );
+  await client.query(
+    'UPDATE users SET email_verification_required = $1, email_verified_at = NULL WHERE id = $2',
+    [true, userId]
+  );
+
+  return buildVerificationLink(email, rawToken);
 };
 
 router.get('/register-status', async (req, res) => {
@@ -91,49 +182,57 @@ router.post('/register', async (req, res) => {
   const normalizedEmail = normalizeEmail(email);
   const rawPassword = String(password || '');
   const normalizedProfileType = normalizeProfileType(profileType);
+  const passwordError = getPasswordValidationMessage(rawPassword);
 
-  if (!normalizedName || !normalizedEmail || rawPassword.length < 6 || !normalizedProfileType || !isValidEmail(normalizedEmail)) {
-    return res.status(400).json({ error: 'Informe nome, email, perfil valido e senha com ao menos 6 caracteres.' });
+  if (!normalizedName || !normalizedEmail || !normalizedProfileType || !isValidEmail(normalizedEmail)) {
+    return res.status(400).json({ error: 'Informe nome, email e perfil válidos.' });
+  }
+
+  if (passwordError) {
+    return res.status(400).json({ error: passwordError });
   }
 
   try {
     const count = await getUsersCount();
     if (!PUBLIC_REGISTER_ENABLED && count > 0) {
-      return res.status(403).json({ error: 'Cadastro publico desativado. Solicite acesso ao administrador.' });
+      return res.status(403).json({ error: 'Cadastro público desativado. Solicite acesso ao administrador.' });
     }
 
     // Apenas o primeiro usuario do sistema vira admin automaticamente.
     const shouldBeAdmin = count === 0;
 
     const passwordHash = await bcrypt.hash(rawPassword, 10);
-    const result = await db.query(
-      'INSERT INTO users (name, email, password_hash, is_admin, profile_type) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [normalizedName, normalizedEmail, passwordHash, shouldBeAdmin, normalizedProfileType]
-    );
+    const user = await db.withTransaction(async (client) => {
+      const now = new Date();
+      const result = await client.query(
+        `INSERT INTO users (
+          name, email, password_hash, is_admin, profile_type, email_verified_at, email_verification_required
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id`,
+        [normalizedName, normalizedEmail, passwordHash, shouldBeAdmin, normalizedProfileType, now, false]
+      );
 
-    const user = {
-      id: result.rows[0]?.id || null,
-      name: normalizedName,
-      email: normalizedEmail,
-      is_admin: shouldBeAdmin,
-      profile_type: normalizedProfileType
-    };
-    assignSessionUser(req, user);
+      return {
+        id: result.rows[0]?.id || null,
+        name: normalizedName,
+        email: normalizedEmail,
+        is_admin: shouldBeAdmin,
+        profile_type: normalizedProfileType,
+        email_verified_at: now,
+        email_verification_required: false
+      };
+    });
 
     return res.status(201).json({
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        isAdmin: Boolean(user.is_admin),
-        profileType: String(user.profile_type || 'driver')
-      }
+      requiresEmailVerification: false,
+      email: user.email,
+      message: 'Conta criada. Você já pode fazer login.'
     });
   } catch (error) {
     if (error?.code === '23505') {
-      return res.status(409).json({ error: 'Este email ja esta cadastrado.' });
+      return res.status(409).json({ error: 'Este email já está cadastrado.' });
     }
-    return res.status(500).json({ error: 'Falha ao criar usuario.' });
+    return res.status(500).json({ error: 'Falha ao criar usuário.' });
   }
 });
 
@@ -148,32 +247,106 @@ router.post('/login', async (req, res) => {
 
   try {
     const user = await db.get(
-      'SELECT id, name, email, password_hash, is_admin, profile_type FROM users WHERE email = $1',
+      'SELECT id, name, email, password_hash, is_admin, profile_type, email_verified_at, email_verification_required FROM users WHERE email = $1',
       [normalizedEmail]
     );
 
     if (!user) {
-      return res.status(401).json({ error: 'Email ou senha invalidos.' });
+      return res.status(401).json({ error: 'Email ou senha inválidos.' });
     }
 
     const isValid = await bcrypt.compare(rawPassword, user.password_hash);
     if (!isValid) {
-      return res.status(401).json({ error: 'Email ou senha invalidos.' });
+      return res.status(401).json({ error: 'Email ou senha inválidos.' });
     }
 
+    // Verificação de email desativada
+
+    await updateLastLoginAt(user.id);
     assignSessionUser(req, user);
 
     return res.json({
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        isAdmin: Boolean(user.is_admin),
-        profileType: String(user.profile_type || 'driver')
-      }
+      user: serializeUser(user)
     });
   } catch (error) {
     return res.status(500).json({ error: 'Falha ao autenticar.' });
+  }
+});
+
+router.post('/resend-verification', async (req, res) => {
+  const normalizedEmail = normalizeEmail(req.body?.email);
+
+  if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
+    return res.json({ ok: true, message: 'Se o email existir, enviaremos um novo link de verificação.' });
+  }
+
+  try {
+    const user = await db.get(
+      'SELECT id, email, email_verified_at, email_verification_required FROM users WHERE email = $1',
+      [normalizedEmail]
+    );
+
+    if (!user || !user.email_verification_required || user.email_verified_at) {
+      return res.json({ ok: true, message: 'Se o email existir, enviaremos um novo link de verificação.' });
+    }
+
+    const verificationLink = await db.withTransaction(async (client) => createEmailVerification(client, user.id, user.email));
+
+    try {
+      await sendVerificationEmail(user.email, verificationLink);
+    } catch (mailError) {
+      console.error('Falha ao reenviar email de verificação:', mailError.message);
+    }
+
+    return res.json({ ok: true, message: 'Se o email existir, enviaremos um novo link de verificação.' });
+  } catch (error) {
+    return res.json({ ok: true, message: 'Se o email existir, enviaremos um novo link de verificação.' });
+  }
+});
+
+router.get('/verify-email', async (req, res) => {
+  const normalizedEmail = normalizeEmail(req.query?.email);
+  const token = String(req.query?.token || '').trim();
+
+  if (!normalizedEmail || !token || !isValidEmail(normalizedEmail)) {
+    return res.redirect(buildFrontendAuthRedirectUrl('verification_invalid', normalizedEmail));
+  }
+
+  try {
+    const tokenHash = hashToken(token);
+    const row = await db.get(
+      `
+        SELECT evt.id, evt.user_id, evt.expires_at, u.email
+        FROM email_verification_tokens evt
+        INNER JOIN users u ON u.id = evt.user_id
+        WHERE u.email = $1
+          AND evt.token_hash = $2
+          AND evt.used_at IS NULL
+        ORDER BY evt.id DESC
+        LIMIT 1
+      `,
+      [normalizedEmail, tokenHash]
+    );
+
+    if (!row) {
+      return res.redirect(buildFrontendAuthRedirectUrl('verification_invalid', normalizedEmail));
+    }
+
+    if (new Date(row.expires_at).getTime() <= Date.now()) {
+      return res.redirect(buildFrontendAuthRedirectUrl('verification_expired', normalizedEmail));
+    }
+
+    await db.withTransaction(async (client) => {
+      await client.query(
+        'UPDATE users SET email_verified_at = NOW(), email_verification_required = $1 WHERE id = $2',
+        [false, row.user_id]
+      );
+      await client.query('UPDATE email_verification_tokens SET used_at = NOW() WHERE id = $1', [row.id]);
+    });
+
+    return res.redirect(buildFrontendAuthRedirectUrl('email_verified', normalizedEmail));
+  } catch (error) {
+    return res.redirect(buildFrontendAuthRedirectUrl('verification_invalid', normalizedEmail));
   }
 });
 
@@ -189,9 +362,14 @@ router.post('/logout', (req, res) => {
 router.post('/change-password', requireAuth, async (req, res) => {
   const currentPassword = String(req.body?.currentPassword || '');
   const newPassword = String(req.body?.newPassword || '');
+  const passwordError = getPasswordValidationMessage(newPassword);
 
-  if (!currentPassword || newPassword.length < 6) {
-    return res.status(400).json({ error: 'Informe a senha atual e uma nova senha com ao menos 6 caracteres.' });
+  if (!currentPassword) {
+    return res.status(400).json({ error: 'Informe a senha atual.' });
+  }
+
+  if (passwordError) {
+    return res.status(400).json({ error: passwordError });
   }
 
   try {
@@ -202,7 +380,7 @@ router.post('/change-password', requireAuth, async (req, res) => {
 
     const isValid = await bcrypt.compare(currentPassword, user.password_hash);
     if (!isValid) {
-      return res.status(401).json({ error: 'A senha atual esta incorreta.' });
+      return res.status(401).json({ error: 'A senha atual está incorreta.' });
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
@@ -213,20 +391,43 @@ router.post('/change-password', requireAuth, async (req, res) => {
   }
 });
 
+router.post('/change-name', requireAuth, async (req, res) => {
+  const nextName = String(req.body?.name || '').trim();
+
+  if (nextName.length < 2) {
+    return res.status(400).json({ error: 'Informe um nome válido.' });
+  }
+
+  try {
+    await db.query('UPDATE users SET name = $1 WHERE id = $2', [nextName, req.session.userId]);
+    const user = await getUserById(req.session.userId);
+    if (!user) {
+      return res.status(500).json({ error: 'Falha ao atualizar nome.' });
+    }
+
+    assignSessionUser(req, user);
+    return res.json({
+      user: serializeUser(user)
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Falha ao atualizar nome.' });
+  }
+});
+
 router.post('/forgot-password', async (req, res) => {
   const normalizedEmail = normalizeEmail(req.body?.email);
   if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
-    return res.json({ ok: true, message: 'Se o email existir, enviaremos instrucoes de recuperacao.' });
+    return res.json({ ok: true, message: 'Se o email existir, enviaremos instruções de recuperação.' });
   }
 
   try {
     const user = await db.get('SELECT id, email FROM users WHERE email = $1', [normalizedEmail]);
     if (!user) {
-      return res.json({ ok: true, message: 'Se o email existir, enviaremos instrucoes de recuperacao.' });
+      return res.json({ ok: true, message: 'Se o email existir, enviaremos instruções de recuperação.' });
     }
 
     const rawToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = hashResetToken(rawToken);
+    const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(Date.now() + (RESET_TOKEN_MINUTES * 60 * 1000));
 
     await db.withTransaction(async (client) => {
@@ -241,16 +442,16 @@ router.post('/forgot-password', async (req, res) => {
       );
     });
 
-    const link = `${APP_BASE_URL}/?email=${encodeURIComponent(user.email)}&resetToken=${encodeURIComponent(rawToken)}`;
+    const link = `${APP_BASE_URL}/driver?email=${encodeURIComponent(user.email)}&resetToken=${encodeURIComponent(rawToken)}`;
     try {
       await sendResetEmail(user.email, link);
     } catch (mailError) {
-      console.error('Falha ao enviar email de recuperacao:', mailError.message);
+      console.error('Falha ao enviar email de recuperação:', mailError.message);
     }
 
-    return res.json({ ok: true, message: 'Se o email existir, enviaremos instrucoes de recuperacao.' });
+    return res.json({ ok: true, message: 'Se o email existir, enviaremos instruções de recuperação.' });
   } catch (error) {
-    return res.json({ ok: true, message: 'Se o email existir, enviaremos instrucoes de recuperacao.' });
+    return res.json({ ok: true, message: 'Se o email existir, enviaremos instruções de recuperação.' });
   }
 });
 
@@ -258,13 +459,18 @@ router.post('/reset-password', async (req, res) => {
   const normalizedEmail = normalizeEmail(req.body?.email);
   const token = String(req.body?.token || '').trim();
   const newPassword = String(req.body?.newPassword || '');
+  const passwordError = getPasswordValidationMessage(newPassword);
 
-  if (!normalizedEmail || !token || newPassword.length < 6 || !isValidEmail(normalizedEmail)) {
-    return res.status(400).json({ error: 'Dados invalidos para redefinir senha.' });
+  if (!normalizedEmail || !token || !isValidEmail(normalizedEmail)) {
+    return res.status(400).json({ error: 'Dados inválidos para redefinir senha.' });
+  }
+
+  if (passwordError) {
+    return res.status(400).json({ error: passwordError });
   }
 
   try {
-    const tokenHash = hashResetToken(token);
+    const tokenHash = hashToken(token);
     const row = await db.get(
       `
         SELECT prt.id, prt.user_id, prt.expires_at
@@ -280,7 +486,7 @@ router.post('/reset-password', async (req, res) => {
     );
 
     if (!row || new Date(row.expires_at).getTime() <= Date.now()) {
-      return res.status(400).json({ error: 'Token invalido ou expirado.' });
+      return res.status(400).json({ error: 'Token inválido ou expirado.' });
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
@@ -298,11 +504,14 @@ router.post('/reset-password', async (req, res) => {
 router.get('/users', requireAdmin, async (req, res) => {
   try {
     const rows = await db.all(
-      'SELECT id, name, email, is_admin, profile_type, created_at FROM users ORDER BY id ASC'
+      'SELECT id, name, email, is_admin, profile_type, created_at, last_login_at FROM users ORDER BY id ASC'
     );
-    return res.json(rows || []);
+    return res.json((rows || []).map((row) => ({
+      ...row,
+      profile_type: serializeProfileType(row.profile_type)
+    })));
   } catch (error) {
-    return res.status(500).json({ error: 'Falha ao carregar usuarios.' });
+    return res.status(500).json({ error: 'Falha ao carregar usuários.' });
   }
 });
 
@@ -312,32 +521,44 @@ router.post('/users', requireAdmin, async (req, res) => {
   const password = String(req.body?.password || '');
   const isAdmin = Boolean(req.body?.isAdmin);
   const normalizedProfileType = normalizeProfileType(req.body?.profileType) || 'driver';
+  const passwordError = getPasswordValidationMessage(password);
 
-  if (!name || !email || password.length < 6 || !isValidEmail(email)) {
-    return res.status(400).json({ error: 'Informe nome, email e senha com ao menos 6 caracteres.' });
+  if (!name || !email || !isValidEmail(email)) {
+    return res.status(400).json({ error: 'Informe nome e email válidos.' });
+  }
+
+  if (passwordError) {
+    return res.status(400).json({ error: passwordError });
   }
 
   try {
     const passwordHash = await bcrypt.hash(password, 10);
     const result = await db.query(
-      'INSERT INTO users (name, email, password_hash, is_admin, profile_type) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [name, email, passwordHash, isAdmin, normalizedProfileType]
+      `INSERT INTO users (
+        name, email, password_hash, is_admin, profile_type, email_verified_at, email_verification_required
+      ) VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING id`,
+      [name, email, passwordHash, isAdmin, normalizedProfileType, false]
     );
     return res.status(201).json({ id: result.rows[0]?.id || null });
   } catch (error) {
     if (error?.code === '23505') {
       return res.status(409).json({ error: 'Este email ja esta cadastrado.' });
     }
-    return res.status(500).json({ error: 'Falha ao criar usuario.' });
+    return res.status(500).json({ error: 'Falha ao criar usuário.' });
   }
 });
 
 router.post('/users/:id/reset-password', requireAdmin, async (req, res) => {
   const userId = Number(req.params.id);
   const newPassword = String(req.body?.newPassword || '');
+  const passwordError = getPasswordValidationMessage(newPassword);
 
-  if (!Number.isFinite(userId) || userId <= 0 || newPassword.length < 6) {
-    return res.status(400).json({ error: 'Dados invalidos para resetar senha.' });
+  if (!Number.isFinite(userId) || userId <= 0) {
+    return res.status(400).json({ error: 'Dados inválidos para resetar senha.' });
+  }
+
+  if (passwordError) {
+    return res.status(400).json({ error: passwordError });
   }
 
   try {
@@ -345,7 +566,7 @@ router.post('/users/:id/reset-password', requireAdmin, async (req, res) => {
     const result = await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
 
     if ((result.rowCount || 0) <= 0) {
-      return res.status(404).json({ error: 'Usuario nao encontrado.' });
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
     }
 
     return res.json({ ok: true });
@@ -358,34 +579,40 @@ router.delete('/users/:id', requireAdmin, async (req, res) => {
   const userId = Number(req.params.id);
 
   if (!Number.isFinite(userId) || userId <= 0) {
-    return res.status(400).json({ error: 'Usuario invalido.' });
+    return res.status(400).json({ error: 'Usuário inválido.' });
   }
 
   if (Number(req.session.userId) === userId) {
-    return res.status(400).json({ error: 'Voce nao pode excluir sua propria conta.' });
+    return res.status(400).json({ error: 'Você não pode excluir sua própria conta.' });
   }
 
   try {
-    const targetUser = await db.get('SELECT id, is_admin FROM users WHERE id = $1', [userId]);
-    if (!targetUser) {
-      return res.status(404).json({ error: 'Usuario nao encontrado.' });
-    }
-
-    if (targetUser.is_admin) {
-      const adminCount = await db.get('SELECT COUNT(*)::int AS count FROM users WHERE is_admin = TRUE');
-      if (Number(adminCount?.count || 0) <= 1) {
-        return res.status(400).json({ error: 'Nao e permitido excluir o ultimo administrador.' });
+    await db.withTransaction(async (client) => {
+      const targetUser = await client.get('SELECT id, is_admin FROM users WHERE id = $1', [userId]);
+      if (!targetUser) {
+        const error = new Error('Usuário não encontrado.');
+        error.statusCode = 404;
+        throw error;
       }
-    }
 
-    const result = await db.query('DELETE FROM users WHERE id = $1', [userId]);
-    if ((result.rowCount || 0) <= 0) {
-      return res.status(404).json({ error: 'Usuario nao encontrado.' });
-    }
+      if (targetUser.is_admin) {
+        const adminCount = await client.get('SELECT COUNT(*)::int AS count FROM users WHERE is_admin = TRUE');
+        if (Number(adminCount?.count || 0) <= 1) {
+          const error = new Error('Não é permitido excluir o último administrador.');
+          error.statusCode = 400;
+          throw error;
+        }
+      }
+
+      await client.query('DELETE FROM users WHERE id = $1', [userId]);
+    });
 
     return res.json({ ok: true });
   } catch (error) {
-    return res.status(500).json({ error: 'Falha ao excluir usuario.' });
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    return res.status(500).json({ error: 'Falha ao excluir usuário.' });
   }
 });
 
@@ -393,21 +620,17 @@ router.get('/me', requireAuth, async (req, res) => {
   try {
     const user = await getUserById(req.session.userId);
     if (!user) {
-      return res.status(401).json({ error: 'Nao autenticado.' });
+      return res.status(401).json({ error: 'Não autenticado.' });
     }
 
     assignSessionUser(req, user);
     return res.json({
       user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        isAdmin: Boolean(user.is_admin),
-        profileType: String(user.profile_type || 'driver')
+        ...serializeUser(user)
       }
     });
   } catch (error) {
-    return res.status(401).json({ error: 'Nao autenticado.' });
+    return res.status(401).json({ error: 'Não autenticado.' });
   }
 });
 

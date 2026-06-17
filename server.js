@@ -1,11 +1,12 @@
 require('dotenv').config({ path: process.env.ENV_FILE || '.env' });
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { initDb, pool } = require('./models/db');
+const { initDb, pool, isPostgres, dialect, sqliteFile } = require('./models/db');
 const recordsRouter = require('./routes/records');
 const authRouter = require('./routes/auth');
 const personalExpensesRouter = require('./routes/personal-expenses');
@@ -44,6 +45,7 @@ const authLimiter = rateLimit({
 const AUTH_LIMITED_ROUTES = new Set([
   'POST /login',
   'POST /register',
+  'POST /resend-verification',
   'POST /forgot-password',
   'POST /reset-password',
   'POST /change-password'
@@ -57,12 +59,32 @@ const authSelectiveLimiter = (req, res, next) => {
   return authLimiter(req, res, next);
 };
 
-// Servir arquivos estáticos do React build (dist) em produção
-const reactBuildPath = path.join(__dirname, 'dist');
-if (IS_PRODUCTION && require('fs').existsSync(reactBuildPath)) {
-  app.use(express.static(reactBuildPath));
-} else {
-  app.use(express.static(path.join(__dirname, 'public')));
+const publicPath = path.join(__dirname, 'public');
+const distPath = path.join(__dirname, 'dist');
+const frontendPath = fs.existsSync(path.join(distPath, 'index.html')) ? distPath : publicPath;
+
+const setNoCacheHeaders = (res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+};
+
+app.use(express.static(frontendPath, {
+  setHeaders: (res, filePath) => {
+    if (String(filePath || '').endsWith('index.html')) {
+      setNoCacheHeaders(res);
+    }
+  }
+}));
+if (frontendPath !== publicPath) {
+  app.use(express.static(publicPath, {
+    setHeaders: (res, filePath) => {
+      const normalizedPath = String(filePath || '');
+      if (normalizedPath.endsWith('manifest.json')) {
+        setNoCacheHeaders(res);
+      }
+    }
+  }));
 }
 app.use(express.json());
 
@@ -79,7 +101,7 @@ const sessionConfig = {
   }
 };
 
-if (IS_PRODUCTION) {
+if (IS_PRODUCTION && isPostgres) {
   sessionConfig.store = new PgSession({
     pool,
     tableName: SESSION_TABLE_NAME,
@@ -103,20 +125,22 @@ app.get('/healthz', (req, res) => {
 });
 
 
-// Fallback para SPA: qualquer rota que não seja API retorna index.html do build
+// Fallback para SPA: qualquer rota que nao seja API retorna a interface ativa.
 app.get(/^\/(?!api).*/, (req, res) => {
-  if (IS_PRODUCTION && require('fs').existsSync(path.join(reactBuildPath, 'index.html'))) {
-    res.sendFile(path.join(reactBuildPath, 'index.html'));
-  } else {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-  }
+  setNoCacheHeaders(res);
+  res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
 const startServer = async () => {
   try {
     await initDb();
-    app.listen(PORT, () => {
-      console.log(`Nt driver rodando em http://localhost:${PORT}`);
+    if (!isPostgres) {
+      console.log(`[database] SQLite ativo em ${sqliteFile}`);
+    } else {
+      console.log(`[database] PostgreSQL ativo via ${dialect}`);
+    }
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Nt driver rodando em http://0.0.0.0:${PORT}`);
     });
   } catch (error) {
     console.error('Falha ao iniciar a aplicacao:', error.message);

@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="icon" type="image/svg+xml" href="https://base44.com/logo_v2.svg" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
   <link rel="manifest" href="/manifest.json" />
   <title>NT Driver</title>
-  <link rel="stylesheet" href="styles.css?v=20260409-1" />
+  <link rel="stylesheet" href="styles.css?v=20260417-2" />
 </head>
 <body>
   <div id="root"></div>
@@ -402,6 +402,36 @@
 
       <section id="personal-sheet" class="page">
         <div class="page-header personal-sheet-header">
+                  <!-- Cards de resumo financeiro do perfil pessoal -->
+                  <div class="summary-grid dashboard-summary-cards personal-dashboard-cards">
+                    <!-- Receitas -->
+                    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 p-5 text-white shadow-lg shadow-emerald-500/20">
+                      <div class="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-8 translate-x-8"></div>
+                      <div class="flex items-center gap-2 mb-1 text-emerald-100 text-sm font-medium">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A9 9 0 1 0 21 12"/></svg>
+                        Receitas
+                      </div>
+                      <p class="text-2xl font-bold tracking-tight" id="personal-sheet-total-income">R$ 0,00</p>
+                    </div>
+                    <!-- Saídas -->
+                    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-red-500 to-red-600 p-5 text-white shadow-lg shadow-red-500/20">
+                      <div class="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-8 translate-x-8"></div>
+                      <div class="flex items-center gap-2 mb-1 text-red-100 text-sm font-medium">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="8 8 12 12 16 8"/><line x1="12" y1="12" x2="12" y2="3"/><path d="M3.51 9a9 9 0 1 0 .49-2.61"/></svg>
+                        Saídas
+                      </div>
+                      <p class="text-2xl font-bold tracking-tight" id="personal-sheet-total-expense">R$ 0,00</p>
+                    </div>
+                    <!-- Lucro -->
+                    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 p-5 text-white shadow-lg shadow-blue-600/20">
+                      <div class="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-8 translate-x-8"></div>
+                      <div class="flex items-center gap-2 mb-1 text-blue-100 text-sm font-medium">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M2 11h20"/></svg>
+                        Lucro
+                      </div>
+                      <p class="text-2xl font-bold tracking-tight" id="personal-sheet-total-profit">R$ 0,00</p>
+                    </div>
+                  </div>
           <h1>Receitas</h1>
           <div class="personal-sheet-filters">
             <div class="filter-group">
@@ -436,11 +466,22 @@
 
         <div class="card personal-sheet-card">
           <div class="personal-sheet-toolbar">
-            <div class="personal-sheet-add-row">
-              <input id="personal-sheet-input-description" type="text" placeholder="Linha de receita" />
-              <input id="personal-sheet-input-day" type="date" placeholder="Data" />
-              <input id="personal-sheet-input-value" type="text" inputmode="decimal" placeholder="0,00" />
-              <button id="personal-sheet-add-income" type="button" class="table-add-button">Adicionar</button>
+            <div class="personal-sheet-add-row modern-finance-form">
+              <div class="modern-form-group">
+                <label for="personal-sheet-input-description">Descrição</label>
+                <input id="personal-sheet-input-description" type="text" placeholder="Ex: Salário, Pix, Venda..." class="modern-input" />
+              </div>
+              <div class="modern-form-group">
+                <label for="personal-sheet-input-day">Dia</label>
+                <input id="personal-sheet-input-day" type="date" class="modern-input" />
+              </div>
+              <div class="modern-form-group">
+                <label for="personal-sheet-input-value">Valor</label>
+                <input id="personal-sheet-input-value" type="text" inputmode="decimal" placeholder="0,00" class="modern-input" />
+              </div>
+              <div class="modern-form-group" style="align-self: flex-end;">
+                <button id="personal-sheet-add-income" type="button" class="table-add-button modern-add-btn">Adicionar</button>
+              </div>
             </div>
           </div>
 
@@ -459,6 +500,58 @@
           </div>
         </div>
       </section>
+
+      <style>
+      .modern-finance-form {
+        display: flex;
+        gap: 18px;
+        flex-wrap: wrap;
+        background: #f8fafc;
+        border-radius: 18px;
+        padding: 18px 16px 10px 16px;
+        margin-bottom: 18px;
+        box-shadow: 0 2px 12px 0 rgba(37,99,235,0.04);
+      }
+      .modern-form-group {
+        display: flex;
+        flex-direction: column;
+        min-width: 140px;
+        flex: 1 1 180px;
+      }
+      .modern-form-group label {
+        font-size: 15px;
+        color: #2563eb;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .modern-input {
+        padding: 10px 12px;
+        border: 1px solid #dbeafe;
+        border-radius: 8px;
+        font-size: 16px;
+        background: #fff;
+        transition: border 0.2s;
+      }
+      .modern-input:focus {
+        border: 1.5px solid #2563eb;
+        outline: none;
+      }
+      .modern-add-btn {
+        background: linear-gradient(90deg, #22d3ee 0%, #2563eb 100%);
+        color: #fff;
+        font-weight: 700;
+        border: none;
+        border-radius: 8px;
+        padding: 12px 24px;
+        font-size: 16px;
+        box-shadow: 0 2px 8px 0 rgba(34,197,94,0.08);
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .modern-add-btn:hover {
+        background: linear-gradient(90deg, #2563eb 0%, #22d3ee 100%);
+      }
+      </style>
 
       <section id="personal-expenses" class="page">
         <div class="page-header">

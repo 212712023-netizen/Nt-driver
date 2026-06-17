@@ -1,0 +1,14 @@
+Instruções rápidas - reinício total no Fly.io (copiar/colar em Git-Bash/WSL)
+
+1) Limpar recursos remanescentes (CONFIRMAR):
+   bash scripts/clean_fly_resources.sh
+
+2) Criar Postgres gerenciado e redeploy automático (interativo):
+   bash scripts/redeploy_from_scratch.sh
+
+Detalhes importantes:
+- Ambos os scripts são interativos e requerem que você responda YES onde solicitado.
+- Execute em Git-Bash/WSL para evitar problemas de quoting no Windows PowerShell.
+- Isso APAGARÁ dados. Faça backup se necessário antes de rodar o script de limpeza.
+
+Se quiser que eu gere versões prontas para PowerShell (ps1) ou apenas os comandos em arquivo .txt para copiar, peça e eu crio.

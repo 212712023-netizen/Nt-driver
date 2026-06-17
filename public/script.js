@@ -1,3 +1,15 @@
+// Atualiza os cards de resumo financeiro do perfil pessoal
+function updatePersonalSheetDashboardCards() {
+  const income = Number(personalSheetState?.totals?.incomeByMonth?.[String(getSelectedPersonalSheetMonth())] || 0);
+  const expense = Number(personalSheetState?.totals?.expenseByMonth?.[String(getSelectedPersonalSheetMonth())] || 0);
+  const profit = income - expense;
+  const incomeEl = document.getElementById('personal-sheet-total-income');
+  const expenseEl = document.getElementById('personal-sheet-total-expense');
+  const profitEl = document.getElementById('personal-sheet-total-profit');
+  if (incomeEl) incomeEl.textContent = formatCurrency(income);
+  if (expenseEl) expenseEl.textContent = formatCurrency(expense);
+  if (profitEl) profitEl.textContent = formatCurrency(profit);
+}
 // Código antigo desabilitado para evitar conflito com React SPA
 // (Se necessário, migrar funcionalidades para componentes React)
 let isSavingRecord = false;
@@ -823,21 +835,21 @@ const showAppToast = (message, tone = 'success') => {
 
 const populateMonthSelect = () => {
   if (!monthSelect && !historyMonthSelect && !summaryMonthSelect) return;
-  const now = new Date();
+  const currentMonth = getCurrentYearMonth();
+  const currentYear = new Date().getFullYear();
   const options = [];
-  for (let i = 0; i < 12; i += 1) {
-    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+  for (let month = 0; month < 12; month += 1) {
+    const date = new Date(currentYear, month, 1);
     const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    const label = `${monthNames[date.getMonth()]} de ${date.getFullYear()}`;
+    const label = monthNames[date.getMonth()];
     options.push(`<option value="${value}">${label}</option>`);
   }
-  if (monthSelect) monthSelect.innerHTML = options.join('');
-  if (historyMonthSelect) historyMonthSelect.innerHTML = options.join('');
-  if (summaryMonthSelect) summaryMonthSelect.innerHTML = options.join('');
-  const currentMonth = getCurrentYearMonth();
-  if (monthSelect) monthSelect.value = currentMonth;
-  if (historyMonthSelect) historyMonthSelect.value = currentMonth;
-  if (summaryMonthSelect) summaryMonthSelect.value = currentMonth;
+
+  [monthSelect, historyMonthSelect, summaryMonthSelect].forEach((selector) => {
+    if (!selector) return;
+    selector.innerHTML = options.join('');
+    if (!/^\d{4}-\d{2}$/.test(String(selector.value || ''))) selector.value = currentMonth;
+  });
 };
 
 const getSelectedMonth = () => {
@@ -845,7 +857,7 @@ const getSelectedMonth = () => {
 };
 
 const syncMonthSelectors = (value) => {
-  if (!value) return;
+  if (!/^\d{4}-\d{2}$/.test(String(value || ''))) return;
   [monthSelect, historyMonthSelect, summaryMonthSelect].forEach((selector) => {
     if (selector && selector.value !== value) selector.value = value;
   });
@@ -1060,6 +1072,7 @@ const renderPersonalSheetTotals = () => {
   const incomeCell = document.getElementById('personal-sheet-income-total');
   if (incomeCell) incomeCell.textContent = formatCurrency(incomeValue);
   if (personalIncomesEl) personalIncomesEl.textContent = formatCurrency(incomeValue);
+  updatePersonalSheetDashboardCards();
 };
 
 const buildPersonalSheetRowHtml = (row) => {
@@ -1102,6 +1115,7 @@ const renderPersonalSheet = () => {
   personalSheetMonthSelect.value = String(getSelectedPersonalSheetMonth());
   renderPersonalSheetRows();
   renderPersonalSheetTotals();
+  updatePersonalSheetDashboardCards();
 };
 
 const loadPersonalSheet = async (year = personalSheetState.year) => {
@@ -2981,7 +2995,7 @@ const init = () => {
   }
 
   const handleMonthChange = (event) => {
-    const selectedValue = event?.target?.value;
+    const selectedValue = event?.target?.value || getCurrentYearMonth();
     syncMonthSelectors(selectedValue);
     loadRecords();
   };
